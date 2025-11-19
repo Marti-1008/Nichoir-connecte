@@ -1,50 +1,27 @@
-#include <PubSubClient.h>
-#include <WiFi.h>
 #include "M5TimerCAM.h"
+#include "base64.h"
 
-const char* ssid     = "plc-511";
-const char* password = "";
-
-IPAddress server(192,168,2,35); // IP du broker MQTT
-
-WiFiClient espClient;           // client réseau WiFi
-PubSubClient client(espClient); // client MQTT
-void setup()
-{
-  TimerCAM.begin();
-  TimerCAM.Camera.sensor->set_pixformat(TimerCAM.Camera.sensor, PIXFORMAT_JPEG);
-  
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  WiFi.setSleep(false);
-  Serial.println("");
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-    // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  client.setServer(server,1883);
-  String esp32 = "ESP32Client-";
-  esp32 += String(random(0xffff), HEX);
-  client.connect(esp32.c_str());
-    
+void setup() {
+    Serial.begin(115200);
+    TimerCAM.begin();
+    TimerCAM.Camera.begin();
 }
 
+void loop() {
+    if (TimerCAM.Camera.get()) {
+        // encode jpeg in Base64
+        String b64 = base64::encode(
+            TimerCAM.Camera.fb->buf,
+            TimerCAM.Camera.fb->len
+        );
 
-void loop()
-{
-  Serial.println(WiFi.status());
-  delay(10);
-  client.publish("image",TimerCAM.Camera.fb->buf, TimerCAM.Camera.fb->len);
-  TimerCAM.Camera.free();
-  
+        // print result
+        Serial.println("----- BASE64 START -----");
+        Serial.println(b64); // rajouter le data:image/jpeg;base64, pour que ça puisse le lire
+        Serial.println("----- BASE64 END -----");
+        // regarder serial write Serial.write(TimerCAM.Camera.fb->buf, TimerCAM.Camera.fb->len);
+
+        TimerCAM.Camera.free();
+        delay(2000);
+    }
 }
