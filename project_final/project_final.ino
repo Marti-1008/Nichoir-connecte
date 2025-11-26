@@ -5,23 +5,23 @@
 #include <EEPROM.h>
 
 
-#define Adress_first_connexion 2
-#define Adress_missed_connexion 3
+#define Adress_missed_connexion 2
 #define ADDR_MAGIC 0
 #define MAGIC_VALUE1 0x42
 #define MAGIC_VALUE2 0x37
 #define SSID_MAX_LEN 32
 #define PASS_MAX_LEN 64
-#define adresse_wifi 4
+#define adresse_wifi 3
 #define adresse_pw  (adresse_wifi + SSID_MAX_LEN)
+#define adresse_mqtt (adresse_pw+PASS_MAX_LEN)
+
 
 
 
 const char* ssid = "esp32_test"; 
 const char* password = "12345678"; 
 
-String ssid_received; 
-String pass_received; 
+
 byte b1, b2;
 
 
@@ -66,25 +66,32 @@ void change_wifi()
 
 void handleSaveWifi() 
 { 
+  char ssid_received [SSID_MAX_LEN]; 
+  char pass_received [PASS_MAX_LEN]; 
   ssid_received = server.arg("ssid"); 
   pass_received = server.arg("pw"); 
   Serial.println("Reçu SSID : " + ssid_received); 
   Serial.println("Reçu Password : " + pass_received); 
   server.sendHeader("Location", "/");
   server.send(303); // 303 = See Other
-  EEPROM.put(Address_first_connexion, 1);
   EEPROM.put(adresse_wifi, ssid_received));
   EEPROM.put(adresse_pw, pass_received);
-  server.end();
+  EEPROM.commit();
 } 
 
 void setup() 
 { 
   Serial.begin(115200); 
   bool condition1 = EEPROM.get(ADDR_MAGIC, b1) != MAGIC_VALUE1;
-  bool condition2 = MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b1);
+  bool condition2 = MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b2);
+  int flag_wifi;
+  bool flag_WIFI = EEPROM.get(Adress_missed_connexion, flag_wifi) == 2;
+  
+  int flag_mqtt;
+  bool condition_mqtt = (EEPROM.get(adresse_mqtt,flag_mqtt)==1)
+  bool condition_final =  condition1 || condition2  or flag_WIFI or condiion_mqttt; // rajouter déconnexion et mqt
 
-  bool condition_final =  condition1 || condition2; // rajouter déconnexion et mqtt
+
   WiFi.mode(condition_final ? WIFI_MODE_AP : WIFI_STA ); // en fonction de si c'est le premier passage ou non définit le mode
   if (condition_final)
   {
@@ -102,11 +109,17 @@ void setup()
     } 
     Serial.print("IP AP : "); 
     Serial.println(WiFi.softAPIP()); 
+    
+    if (flag_mqtt ==1)
+    {
+      EEPROM.put(adresse_mqtt, 0);
+      EEPROM.commit();
+    }
   }
   else 
   {
-    String ssid ;
-    String password;
+    char ssid [SSID_MAX_LEN];
+    char password [PASS_MAX_LEN];
     EEPROM.get(adresse_wifi, ssid);
     EEPROM.get(adresse_pw, password);
     WiFi.begin(ssid, password);
@@ -119,6 +132,13 @@ void setup()
     {
       delay(500);
       Serial.print(".");
+    }
+    int valeur_missed_connexion ;
+    EEPROM.get(Adress_missed_connexion,valeur_missed_connexion);
+    if (wifi.status()==WL_CONNECTED and valeur_missed_connexion !=0)
+    {
+      EEPROM.put(Adress_missed_connexion, 0);
+      EEPROM.commit();
     }
 
     Serial.println("");
@@ -136,26 +156,32 @@ void setup()
 
  void loop() 
 { 
-  if (WiFi.status() == WL_CONNECTED)
+  int flag_mqtt;
+  bool deconnexion = EEPROM.get(adresse_mqtt, flag_mqtt)==1
+  if (WiFi.status() == WL_CONNECTED or connexion)
   {
-    if (EEPROM.get(ADDR_MAGIC, b1) != MAGIC_VALUE1 || MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b1))//lors du premier passage utilisation du site web
+  bool condition1 = EEPROM.get(ADDR_MAGIC, b1) != MAGIC_VALUE1;
+  bool condition2 = MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b2);
+  bool condition_final =  condition1 || condition2; // rajouter déconnexion et mqtt
+    if (condution_final)//lors du premier passage utilisation du site web
     {
       EEPROM.put(ADDR_MAGIC,MAGIC_VALUE1);
       EEPROM.put(ADDR_MAGIC+1,MAGIC_VALUE2);
+      EEPROM.commit()
       server.handleClient();
     }
     else 
     {
       int nombre;
       EEPROM.get(Adress_missed_connexion, nombre);
-      if nombre == 2
+      if (nombre == 2)
       {
-        server.handleClient();
-        EEPROM.put(Adress_missed_connexion, 0);
+        server.handleClient(); // si il y a une déconnexion
       }
       else
       {
         EEPROM.put(Adress_missed_connexion, nombre+1);
+        EEPROM.commit();
       }
     }
   }
