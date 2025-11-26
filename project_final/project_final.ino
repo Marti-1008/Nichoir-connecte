@@ -3,8 +3,12 @@
 #include <WebServer.h> 
 #include <ESPmDNS.h> 
 #include <EEPROM.h>
+#include "driver/rtc_io.h"
 
 
+#define batterie_ADC 33
+#define LED_PIN     4
+#define CAPTEUR_PIN 13
 #define Adress_missed_connexion 2
 #define ADDR_MAGIC 0
 #define MAGIC_VALUE1 0x42
@@ -24,7 +28,10 @@ const char* password = "12345678";
 
 byte b1, b2;
 
+IPAddress server(192,168,2,45);
 
+WiFiClient espClient;
+PubSubClient client(espClient);
 WebServer server(80); 
 
 void change_wifi() 
@@ -83,6 +90,14 @@ void handleSaveWifi()
 
 void setup() 
 { 
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(CAPTEUR_PIN, INPUT);
+  rtc_gpio_pullup_dis((gpio_num_t)CAPTEUR_PIN);
+  // EXT1 wakeup : se réveille si le capteur est HIGH
+  esp_sleep_enable_ext1_wakeup((1ULL << CAPTEUR_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
+
+  // Timer wakeup : se réveille toutes les 24h
+  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24h en microsecondes
   Serial.begin(115200); 
   bool condition1 = EEPROM.get(ADDR_MAGIC, b1) != MAGIC_VALUE1;
   bool condition2 = MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b2);
@@ -155,15 +170,24 @@ void setup()
     String esp32 = "ESP32Client-";
     esp32 += String(random(0xffff), HEX);
     client.connect(esp32.c_str());
+    if (cause == ESP_SLEEP_WAKEUP_EXT1)
+    {
+      TimerCAM.begin();
+      TimerCAM.Camera.begin();
+      client.setBufferSize(100000);
+    }
   }
 }
+
+
+
 
 
  void loop() 
 { 
   int flag_mqtt;
   bool deconnexion = EEPROM.get(adresse_mqtt, flag_mqtt)==1;
-  if (WiFi.status() == WL_CONNECTED || connexion)
+  if (WiFi.status() != WL_CONNECTED || deconnexion)
   {
   bool condition1 = EEPROM.get(ADDR_MAGIC, b1) != MAGIC_VALUE1;
   bool condition2 = MAGIC_VALUE2 != EEPROM.get(ADDR_MAGIC+1, b2);
@@ -190,4 +214,52 @@ void setup()
       }
     }
   }
+  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  if (cause == ESP_SLEEP_WAKEUP_EXT1 && WiFi.status() == WL_CONNECTED) 
+  {
+    digitalWrite(LED_PIN, HIGH); //
+    // take a photoif (TimerCAM.Camera.get()) 
+    if (TimerCAM.Camera.get()) 
+    {
+      uint8_t* img = TimerCAM.Camera.fb->buf;
+      size_t size = TimerCAM.Camera.fb->len;
+
+      Serial.print("Image size (bytes): ");
+      Serial.println(size);
+
+          // Conversion en Base64
+      String imgBase64 = base64::encode(img, size);
+
+          // Envoi en chunks de 1 KB
+      size_t maxChunk = 1024;
+      size_t offset = 0;
+
+      client.publish("esp32/MineurBenNanna/image", "start"); // début
+          
+      int taille = imgBase64.length()
+      client.publish("esp32/MineurBenNanna/nbrpaquet",taille/maxChunk)
+      while (offset < taille) 
+      {
+            
+        String chunk = imgBase64.substring(offset, offset + maxChunk);
+        client.publish("esp32/MineurBenNanna/image", chunk.c_str(), false);
+        offset += maxChunk;
+        delay(10);
+      }
+      Serial.println("Image sent via Base64!");
+
+      TimerCAM.Camera.free();
+      delay(60000); // attente avant prochaine capture
+    } 
+  }
+  else if (cause == ESP_SLEEP_WAKEUP_TIMER)
+  {
+    // envoie le niveau de la batterie
+    char tension = '0' + TimerCAM.Power.getBatteryVoltage();
+    char level = '0'+ TimerCAM.Power.getBatteryLevel()
+    client.publish("esp32/MineurBenNanna/batterie/level",level);
+    client.publish("esp32/MineurBenNanna/batterie/tension", tension);
+
+  }
+  esp_deep_sleep_start();
 }
