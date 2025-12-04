@@ -1,60 +1,196 @@
 #include "M5TimerCAM.h"
 #include <WiFi.h>
+// ... (autres includes non modifiés) ...
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#include <Preferences.h>
+#include <driver/gpio.h>
+#include <Arduino.h>
 #include <PubSubClient.h>
 #include "Base64.h"  // bibliothèque ArduinoBase64
-#include <NetworkClient.h> 
-#include <WebServer.h> 
-#include <ESPmDNS.h> 
-#include <EEPROM.h>
-#include <driver/gpio.h>
-
+#include <NetworkClient.h>
 
 #define batterie_ADC 33
 #define LED_PIN     4
 #define CAPTEUR_PIN 13
-#define Adress_missed_connexion 2
-#define ADDR_MAGIC 0
 #define MAGIC_VALUE1 0x42
-#define MAGIC_VALUE2 0x37
+#define MAGIC_VALUE2 0x36
 #define SSID_MAX_LEN 32
 #define PASS_MAX_LEN 64
-#define adresse_wifi 3
-#define adresse_pw  (adresse_wifi + SSID_MAX_LEN)
-#define adresse_mqtt (adresse_pw+PASS_MAX_LEN)
 
 
-
-bool condition1 ;
-bool condition2 ;
-bool flag_WIFI ; 
-bool condition_mqtt;
-bool condition_final;
-const char* ssid = "esp32_test"; 
-const char* password = "12345678"; 
-
-
-byte b1, b2;
-
+WebServer server(80);
 WiFiClient espClient;
 PubSubClient client(espClient);
-IPAddress mqttServer(192,168,2,45); // Pour MQTT
-WebServer server(80);               // Pour serveur web
+IPAddress mqttServer(192,168,2,45);
+Preferences prefs_param;
+Preferences prefs;
 
 
 
-void change_wifi() 
-{ 
+
+// global data
+uint8_t b2;
+uint8_t b1;
+uint8_t mqtt_set;
+uint8_t missed_connexion;
+bool wifi_can_connect;
+bool first_time;
+esp_sleep_wakeup_cause_t cause;
+
+//=======================================================================================================================================================
+// définis paramètre de l'image 
+void F_contrast(uint8_t *value)
+{
+  TimerCAM.Camera.sensor->set_contrast(TimerCAM.Camera.sensor,*value);
+}
+ 
+void F_saturation (uint8_t *value)
+{
+  TimerCAM.Camera.sensor->set_saturation(TimerCAM.Camera.sensor,*value);
+}
+ 
+void F_brightness(uint8_t *value)
+{
+  TimerCAM.Camera.sensor->set_brightness(TimerCAM.Camera.sensor,*value);
+}
+ 
+void F_mirror(uint8_t *value)
+{
+  TimerCAM.Camera.sensor->set_hmirror(TimerCAM.Camera.sensor,*value);
+}
+ 
+void F_flip(uint8_t *value)
+{
+  TimerCAM.Camera.sensor->set_vflip(TimerCAM.Camera.sensor,*value);
+}
+
+framesize_t frameSizes[] = {
+  FRAMESIZE_96X96,
+  FRAMESIZE_QQVGA,
+  FRAMESIZE_128X128,
+  FRAMESIZE_QCIF,
+  FRAMESIZE_HQVGA,
+  FRAMESIZE_240X240,
+  FRAMESIZE_QVGA,
+  FRAMESIZE_320X320,
+  FRAMESIZE_CIF,
+  FRAMESIZE_HVGA,
+  FRAMESIZE_VGA,
+  FRAMESIZE_SVGA,
+  FRAMESIZE_XGA,
+  FRAMESIZE_HD,
+  FRAMESIZE_SXGA,
+  FRAMESIZE_UXGA
+};
+ 
+void F_image_format(uint8_t *index)
+{
+  if (*index < sizeof(frameSizes)/sizeof(frameSizes[0])) 
+  {
+     TimerCAM.Camera.sensor->set_framesize(TimerCAM.Camera.sensor, frameSizes[*index]);
+  }
+}
+//=======================================================================================================================================================
+
+
+ 
+  
+//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
+// Ca s'occupe du set des paramètres
+void callback(char* topic, byte* payload, unsigned int length)
+{
+  prefs_param.begin("Parametre", false); 
+  if (strcmp(topic, "B3/MartinOmar/parametre/camera/quality") == 0)
+  {
+    
+    char qualite[length+1];
+    memcpy(qualite, payload, length);
+    qualite[length]='\0';
+
+    prefs_param.putInt("set_qualite",atoi(qualite));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/camera/contrast") == 0)
+  {
+    char contrast[length+1];
+    memcpy(contrast, payload, length);
+    contrast[length]='\0';
+
+    prefs_param.putInt("set_contrast",atoi(contrast));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/camera/saturation") == 0)
+  {
+    char saturation[length+1];
+    memcpy(saturation, payload, length);
+    saturation[length]='\0';
+
+    prefs_param.putInt("set_saturation",atoi(saturation));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/camera/brightness") == 0)
+  {
+    char brightness[length+1];
+    memcpy(brightness, payload, length);
+    brightness[length]='\0';
+
+    prefs_param.putInt("set_brightness",atoi(brightness));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/camera/mirror") == 0)
+  {
+    char mirror[length+1];
+    memcpy(mirror, payload, length);
+    mirror[length]='\0';
+
+    prefs_param.putInt("set_mirror",atoi(mirror));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/camera/flip") == 0)
+  {
+    char flip[length+1];
+    memcpy(flip, payload, length);
+    flip[length]='\0';
+
+    prefs_param.putInt("set_flip",atoi(flip));
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/wifi/password") == 0)
+  {
+    char password[length+1];
+    memcpy(password, payload, length);
+    password[length]='\0';
+
+    prefs_param.putString("set_password",password);
+    
+  }
+  else if (strcmp(topic,"B3/MartinOmar/parametre/wifi/ssid") == 0)
+  {
+    
+    char ssid[length+1];
+    memcpy(ssid, payload, length);
+    ssid[length]='\0';
+    prefs_param.putInt("changed",1);
+    prefs_param.putString("set_ssid",ssid);
+  }
+
+  prefs_param.end(); // termine la session
+}
+//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Fonction permettant de faire appaaître la page web quand pas connecté
+void change_wifi()
+{
   server.send(200, "text/html",
-  R"rawliteral( <!DOCTYPE html> <html lang="fr"> 
-  <head ><meta charset="UTF-8"> <body style="background-color:#1A1615"> 
+  R"rawliteral( <!DOCTYPE html> <html lang="fr">
+  <head ><meta charset="UTF-8"> <body style="background-color:#1A1615">
   <h1 style="text-align: center; text-decoration: underline;color : white ;"> Assignation du nouveau wifi pour le nichoir connecté </h1>
-  <h2 style="text-align: center;color : white ;"> By <strong> Martin &; Omar</strong></h2> 
-  <div style=" color : white ;text-align:center "> Ici tu peux formater la configuration du wifi,</div> 
-  <div style="color: red;text-align: center;"> <strong> cette opération est définitive </strong></div> 
-  <div style="text-align:center;color : white ;"> Si vous vous rendez compte que vous vous êtes trompés veillez contactez le support à l'adresse de contact notez ci-dessous</div> 
-  <div style="text-align:center;color : white ;"> Cette opération est délicate : pour cela nous vous conseillons de vous poser et de ne pas vous tromper dans la configuration du wifi</div> 
-  <h2 style="text-align: center;color: white;"> Encodage du wifi</h2> 
-  <table > 
+  <h2 style="text-align: center;color : white ;"> By <strong> Martin & Omar</strong></h2>
   <form method="POST" action="/saveWifi" style="text-align: center; margin-top: 20px;">
    <div style="margin-bottom: 10px; color: white;">
       <label for="ssid">Nom du WiFi :</label>
@@ -68,217 +204,270 @@ void change_wifi()
       <input type="submit" value="Enregistrer">
     </div>
   </form>
-
-  </table> 
-  <p style="text-align:left; color:white; font-family: Arial, sans-serif;"> 
-  Merci d avoir choisi notre <strong>nichoir connecté</strong> ! <br><br> Grâce à vous, vos petits amis à plumes vont pouvoir gazouiller en toute tranquillité , et nous, on peut continuer à faire 
-  <em>ronronner nos serveurs</em> pour que tout fonctionne parfaitement.<br><br> Nous espérons que votre nichoir vous apportera autant de joie que les oiseaux apportent de chansons au matin.<br> Merci de faire partie de notre volée de passionnés ! 🕊️<br>
-  <br> Avec toute notre gratitude, <strong>Martin &amp; Omar</strong>  </p> 
-  <div style="text-align: right; color : 
-  white ;"><address>Contact : <a href="martin.mineur@student.hepl.be">Martin</a> ou <a href="Omar.benanna@student.hepl.be">Omar</a></address></div> 
-  </body> </head> </html>)rawliteral"); 
+  </body> </head> </html>)rawliteral");
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void handleSaveWifi() 
-{ 
-  char ssid_received [SSID_MAX_LEN]; 
-  char pass_received [PASS_MAX_LEN]; 
-  String ssidStr = server.arg("ssid");
-  ssidStr.toCharArray(ssid_received, SSID_MAX_LEN);
+
+//########################################################################################################################################################
+// récupère les datas de la page web
+void handleSaveWifi()
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    WiFi.disconnect(); // si on veut changer de wifi par set du mqtt
+  }
+  String ssidStr = server.arg("ssid"); // récupère les données du site web
   String pwdStr = server.arg("pw");
-  pwdStr.toCharArray(pass_received, PASS_MAX_LEN);
-  Serial.println("Reçu SSID : " + ssidStr); 
-  Serial.println("Reçu Password : " + pwdStr); 
-  server.sendHeader("Location", "/");
-  server.send(303); // 303 = See Other
-  EEPROM.put(adresse_wifi, ssid_received);
-  EEPROM.put(adresse_pw, pass_received);
-  EEPROM.commit();
-} 
 
-void setup() 
-{ 
+  Serial.println("Reçu SSID : " + ssidStr); 
+  Serial.println("Reçu Password : " + pwdStr);
+
+  prefs.begin("wifiPrefs", false); 
+
+  if (first_time) // on regarde si on doit les changer
+  {
+    prefs.putUChar("magic0", MAGIC_VALUE1); // changement des valeurs des bits magiques et des paramètres wifi
+    prefs.putUChar("magic1", MAGIC_VALUE2);
+    prefs.putString("ssid", ssidStr); 
+  }
+  prefs.putString("pw", pwdStr);   
+  prefs.end(); // termine la session
+
+  server.send(200, "text/plain", "WiFi credentials saved. ESP32 is restarting...");
+  prefs.begin("wifiPrefs", true); 
+
+  prefs.begin("wifiPrefs", false);  // réinitialise les paramètres de déconnexion et du change wifi de mqtt
+  prefs_param.begin("Parametre",false);
+  prefs_param.putInt("changed",0);
+  prefs.putInt("disconnect",0);
+  prefs_param.end();
+  prefs.end();
+  // ESP.restart(); permet de rémarrer l'esp32
+  esp_deep_sleep_start();
+}
+//########################################################################################################################################################
+
+
+
+
+
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+// connect to wifi
+void connectToWiFi(const char* ssid, const char* password) {
+    Serial.printf("Connecting to %s ", ssid);
+    WiFi.begin(ssid, password);
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) 
+    {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) 
+    {
+        Serial.println("WiFi connected!");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+        client.setServer(mqttServer, 1883);
+    } 
+    else 
+    {
+      Serial.println("Failed to connect to WiFi."); // ajout facteur need connexion
+      uint8_t new_missed_connexion = missed_connexion+1;
+      prefs.begin("wifiPrefs", false); 
+      prefs.putInt("disconnect", new_missed_connexion);
+      prefs.end();
+      esp_deep_sleep_start();
+    }
+}
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+// set des caractéristiques de la caméra
+void Setcam()
+{
+  prefs_param.begin("Parametre",true);
+  uint8_t value_contrast = prefs.getInt("set_contrast",0);
+  uint8_t value_qualite = prefs.getInt("set_qualite",0);
+  uint8_t value_saturation = prefs.getInt("set_saturation",0);
+  uint8_t value_brightness = prefs.getInt("set_brightness",0);
+  uint8_t value_mirror = prefs.getInt("set_mirror",0);
+  uint8_t value_flip = prefs.getInt("set_flip",0);
+  F_image_format(&value_qualite);
+  F_mirror(&value_mirror);
+  F_contrast(&value_contrast);
+  F_saturation(&value_saturation);
+  F_brightness(&value_brightness);
+  F_flip(&value_flip);
+}
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+void sub()
+{
+  client.subscribe("B3/MartinOmar/parametre/camera/brightness");
+  client.subscribe("B3/MartinOmar/parametre/camera/contrast");
+  client.subscribe("B3/MartinOmar/parametre/camera/saturation");
+  client.subscribe("B3/MartinOmar/parametre/camera/quality");
+  client.subscribe("B3/MartinOmar/parametre/camera/mirror");
+  client.subscribe("B3/MartinOmar/parametre/camera/flip");
+  client.subscribe("B3/MartinOmar/parametre/wifi/ssid");
+  client.subscribe("B3/MartinOmar/parametre/wifi/password");
+  client.setCallback(callback);
+}
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+
+
+
+
+void setup()
+{
   pinMode(LED_PIN, OUTPUT);
   pinMode(CAPTEUR_PIN, INPUT);
   gpio_pulldown_en((gpio_num_t)CAPTEUR_PIN);
   gpio_pullup_dis((gpio_num_t)CAPTEUR_PIN);
+  cause = esp_sleep_get_wakeup_cause();
+
+
   // EXT1 wakeup : se réveille si le capteur est HIGH
   esp_sleep_enable_ext1_wakeup((1ULL << CAPTEUR_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
-
-  // Timer wakeup : se réveille toutes les 24h
-  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24h en microsecondes
-  Serial.begin(115200); 
-  EEPROM.get(ADDR_MAGIC, b1);
-   EEPROM.get(ADDR_MAGIC+1, b2);
-  condition1 =  b1!= MAGIC_VALUE1;
-  condition2 = MAGIC_VALUE2 != b2;
-  int flag_wifi;
-  EEPROM.get(Adress_missed_connexion, flag_wifi);
-  flag_WIFI = (flag_wifi >= 2);
-
-  
-  int flag_mqtt;
-  EEPROM.get(adresse_mqtt,flag_mqtt);
-  condition_mqtt = flag_mqtt==1;
-  condition_final =  (condition1 && condition2)  || flag_WIFI || condition_mqtt; // rajouter déconnexion et mqt
+  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24h en microsecondes, Timer wakeup : se réveille toutes les 24h
 
 
-  WiFi.mode(condition_final ? WIFI_MODE_AP : WIFI_STA ); // en fonction de si c'est le premier passage ou non définit le mode
-  if (condition_final)
+
+  Serial.begin(115200);
+  Serial.println("\nStarting setup...");
+
+  prefs.begin("wifiPrefs", true); 
+  prefs_param.begin("Parametre",true);
+  b1 = prefs.getInt("magic0", 0); // le éro correspon à la valeur par défaut
+  b2 = prefs.getInt("magic1", 0); // vérification premier passage
+  mqtt_set =prefs_param.getInt("changed",0);
+  missed_connexion = prefs.getInt("disconnect",0);
+  prefs_param.end();
+
+  first_time =  ((b1 == MAGIC_VALUE1) && (b2 == MAGIC_VALUE2));
+  wifi_can_connect = first_time || mqtt_set != 1 || missed_connexion !=2; // si JAMAIS initialsé, si utilisateur ne change de wifi, si n'est pas déconnecté
+
+  if (wifi_can_connect) // connexion au wifi
   {
+    Serial.println("WiFi credentials found. Attempting to connect as STA.");
+    // Lecture unique dans setup() pour initialiser la variable globale
+    String globalSavedSSID = prefs.getString("ssid", ""); 
+    String savedPW = prefs.getString("pw", "");
+    prefs.end(); 
     
-    server.on("/", HTTP_GET, change_wifi); 
-    server.on("/saveWifi", HTTP_POST, handleSaveWifi);
-    server.begin();//à  voir en fonction de flag
-      bool ok = WiFi.softAP(ssid, password); 
-    if(ok) 
-    { 
-      Serial.println("AP lancé avec succès !");
-    } 
-    else 
-    { 
-      Serial.println("Erreur lors du lancement de l'AP !"); 
-    } 
-    Serial.print("IP AP : "); 
-    Serial.println(WiFi.softAPIP()); 
+    WiFi.mode(WIFI_STA);
+    connectToWiFi(globalSavedSSID.c_str(), savedPW.c_str()); // appelle fonction connexion to wifi
     
-    if (flag_mqtt ==1)
+    sub(); // change the parametre
+
+
+    if (cause == ESP_SLEEP_WAKEUP_EXT1 )
     {
-      EEPROM.put(adresse_mqtt, 0);
-      EEPROM.commit();
+      Setcam();
     }
   }
-  else 
+
+
+  else // demande à l'utilisateur de se connecter
   {
-    char ssid [SSID_MAX_LEN];
-    char password [PASS_MAX_LEN];
-    EEPROM.get(adresse_wifi, ssid);
-    EEPROM.get(adresse_pw, password);
-    WiFi.begin(ssid, password);
-    WiFi.setSleep(false);
-    Serial.println("");
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
+    Serial.println("No WiFi credentials found. Starting in AP mode to configure.");
+    prefs.end(); 
+    WiFi.mode(WIFI_MODE_AP);
+    WiFi.softAP("esp32_config_AP", "12345678"); 
+    Serial.print("AP IP address: ");
+    Serial.println(WiFi.softAPIP());
 
-    while (!WiFi.status() )
-    {
-      delay(500);
-      Serial.print(".");
-    }
-    int valeur_missed_connexion ;
-    client.setServer(mqttServer, 1883);
-    client.setServer(mqttServer, 1883);
-
-    EEPROM.get(Adress_missed_connexion,valeur_missed_connexion);
-    if (valeur_missed_connexion !=0 && WiFi.status())
-    {
-      EEPROM.put(Adress_missed_connexion, 0);
-      EEPROM.commit();
-    }
-
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    String esp32 = "ESP32Client-";
-    esp32 += String(random(0xffff), HEX);
-    client.connect(esp32.c_str());
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-
-    if (cause == ESP_SLEEP_WAKEUP_EXT1)
-    {
-      TimerCAM.begin();
-      TimerCAM.Camera.begin();
-      client.setBufferSize(100000);
-    }
+    server.on("/", HTTP_GET, change_wifi);
+    server.on("/saveWifi", HTTP_POST, handleSaveWifi);
+    server.begin();
+    Serial.println("Web server started.");
   }
 }
 
-
-
-
-
- void loop() 
-{ 
-
-  if (WiFi.status() != WL_CONNECTED || condition_mqtt)
+void loop()
+{
+  if (wifi_can_connect) 
   {
-    condition_final =  (condition1 && condition2)  || flag_WIFI || condition_mqtt;
-    if (condition_final)//lors du premier passage utilisation du site web
-    {
-      EEPROM.put(ADDR_MAGIC,MAGIC_VALUE1);
-      EEPROM.put(ADDR_MAGIC+1,MAGIC_VALUE2);
-      EEPROM.commit();
-      server.handleClient();
-    }
-    else 
-    {
-      int nombre;
-      EEPROM.get(Adress_missed_connexion, nombre);
-      if (nombre == 2)
-      {
-        server.handleClient(); // si il y a une déconnexion
-      }
-      else
-      {
-        EEPROM.put(Adress_missed_connexion, nombre+1);
-        EEPROM.commit();
-      }
-    }
+    server.handleClient();
   }
-  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-  if (cause == ESP_SLEEP_WAKEUP_EXT1 && WiFi.status() == WL_CONNECTED) 
+  if (cause == ESP_SLEEP_WAKEUP_EXT1 && WiFi.status() == WL_CONNECTED)
   {
     digitalWrite(LED_PIN, HIGH); //
-    // take a photoif (TimerCAM.Camera.get()) 
-    if (TimerCAM.Camera.get()) 
+    // take a photoif (TimerCAM.Camera.get())
+    if (TimerCAM.Camera.get())
     {
-      digitalWrite(LED_PIN, LOW);
+      digitalWrite(LED_PIN, LOW);// éteint la led si rien
       uint8_t* img = TimerCAM.Camera.fb->buf;
       size_t size = TimerCAM.Camera.fb->len;
-
-      Serial.print("Image size (bytes): ");
-      Serial.println(size);
-
+ 
           // Conversion en Base64
       String imgBase64 = base64::encode(img, size);
-
+ 
           // Envoi en chunks de 1 KB
       size_t maxChunk = 1024;
       size_t offset = 0;
-
-      client.publish("esp32/MineurBenNanna/image", "start"); // début
-          
+ 
+      client.publish("B3/MartinOmar/image/start", "start"); // début
+         
       int taille = imgBase64.length();
       int nbr_paquet = taille / maxChunk;
       String nbr_paquet_str = String(nbr_paquet);
-      client.publish("esp32/MineurBenNanna/nbrpaquet", nbr_paquet_str.c_str());
-
-      
-      while (offset < taille) 
+  
+ 
+      String chunk;
+      while (offset < taille)
       {
-            
-        String chunk = imgBase64.substring(offset, offset + maxChunk);
-        client.publish("esp32/MineurBenNanna/image", chunk.c_str(), false);
+           
+        chunk = imgBase64.substring(offset, offset + maxChunk);
+        client.publish("B3/MartinOmar/image/data", chunk.c_str(), false);
         offset += maxChunk;
         delay(10);
       }
-      Serial.println("Image sent via Base64!");
-
+      client.publish("B3/MartinOmar/image/end","end", false);
+ 
+      //Serial.println("Image sent via Base64!");
+ 
       TimerCAM.Camera.free();
-      delay(60000); // attente avant prochaine capture
-    } 
+      delay(100); // attente avant prochaine capture
+    }
     digitalWrite(LED_PIN, LOW);
+    String tensionStr = String(TimerCAM.Power.getBatteryVoltage());
+    String levelStr = String(TimerCAM.Power.getBatteryLevel());
+    client.publish("B3/MartinOmar/parametre/battrie/tension", tensionStr.c_str());
+    client.publish("B3/MartinOmar/parametre/battrie/level",levelStr.c_str());
+ 
+  
+ 
   }
   else if (cause == ESP_SLEEP_WAKEUP_TIMER)
   {
     // envoie le niveau de la batterie
     String tensionStr = String(TimerCAM.Power.getBatteryVoltage());
     String levelStr = String(TimerCAM.Power.getBatteryLevel());
-    client.publish("topic", tensionStr.c_str());
-    client.publish("esp32/MineurBenNanna/batterie/level",levelStr.c_str());
-
+    client.publish("B3/MartinOmar/parametre/battrie/tension", tensionStr.c_str());
+    client.publish("B3/MartinOmar/parametre/battrie/level",levelStr.c_str());
+ 
+  }
+  client.publish("esp32/MineurBenNanna/receive_data","true");
+  int time= millis();
+  while (millis()-time<10000)
+  {
+    client.loop();
+    //  permet de recevoir les messages pendant un laps de temps de 10 sec
   }
   esp_deep_sleep_start();
+  
 }
