@@ -1,6 +1,5 @@
 #include "M5TimerCAM.h"
 #include <WiFi.h>
-// ... (autres includes non modifiés) ...
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
@@ -13,8 +12,8 @@
 #define batterie_ADC 33
 #define LED_PIN     4
 #define CAPTEUR_PIN 13
-#define MAGIC_VALUE1 0x42
-#define MAGIC_VALUE2 0x36
+#define MAGIC_VALUE1 0x14
+#define MAGIC_VALUE2 0x45
 #define SSID_MAX_LEN 32
 #define PASS_MAX_LEN 64
 
@@ -37,6 +36,7 @@ uint8_t missed_connexion;
 bool wifi_can_connect;
 bool first_time;
 esp_sleep_wakeup_cause_t cause;
+bool changed_done = true;
 
 //=======================================================================================================================================================
 // définis paramètre de l'image 
@@ -196,7 +196,7 @@ void change_wifi()
       <label for="ssid">Nom du WiFi :</label>
       <input type="text" id="ssid" name="ssid">
     </div>
-    <div style="margin-bottom: 10px; color: white text-align: center;">
+    <div style="margin-bottom: 10px; color: white ;  text-align: center;">
       <label for="pw">Mot de passe :</label>
       <input type="password" id="pw" name="pw">
     </div>
@@ -229,10 +229,10 @@ void handleSaveWifi()
   {
     prefs.putUChar("magic0", MAGIC_VALUE1); // changement des valeurs des bits magiques et des paramètres wifi
     prefs.putUChar("magic1", MAGIC_VALUE2);
-    prefs.putString("ssid", ssidStr); 
+    
   }
   prefs.putString("pw", pwdStr);   
-  prefs.end(); // termine la session
+  prefs.putString("ssid", ssidStr); 
 
   server.send(200, "text/plain", "WiFi credentials saved. ESP32 is restarting...");
   prefs.begin("wifiPrefs", true); 
@@ -243,8 +243,7 @@ void handleSaveWifi()
   prefs.putInt("disconnect",0);
   prefs_param.end();
   prefs.end();
-  // ESP.restart(); permet de rémarrer l'esp32
-  esp_deep_sleep_start();
+  changed_done = false;
 }
 //########################################################################################################################################################
 
@@ -291,12 +290,12 @@ void connectToWiFi(const char* ssid, const char* password) {
 void Setcam()
 {
   prefs_param.begin("Parametre",true);
-  uint8_t value_contrast = prefs.getInt("set_contrast",0);
-  uint8_t value_qualite = prefs.getInt("set_qualite",0);
-  uint8_t value_saturation = prefs.getInt("set_saturation",0);
-  uint8_t value_brightness = prefs.getInt("set_brightness",0);
-  uint8_t value_mirror = prefs.getInt("set_mirror",0);
-  uint8_t value_flip = prefs.getInt("set_flip",0);
+  uint8_t value_contrast = prefs_param.getInt("set_contrast",0);
+  uint8_t value_qualite = prefs_param.getInt("set_qualite",0);
+  uint8_t value_saturation = prefs_param.getInt("set_saturation",0);
+  uint8_t value_brightness = prefs_param.getInt("set_brightness",0);
+  uint8_t value_mirror = prefs_param.getInt("set_mirror",0);
+  uint8_t value_flip = prefs_param.getInt("set_flip",0);
   F_image_format(&value_qualite);
   F_mirror(&value_mirror);
   F_contrast(&value_contrast);
@@ -330,9 +329,10 @@ void sub()
 
 
 
-
+//__________________________________________________________________________________________________________________________________________________________
 void setup()
 {
+  Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
   pinMode(CAPTEUR_PIN, INPUT);
   gpio_pulldown_en((gpio_num_t)CAPTEUR_PIN);
@@ -342,8 +342,8 @@ void setup()
 
   // EXT1 wakeup : se réveille si le capteur est HIGH
   esp_sleep_enable_ext1_wakeup((1ULL << CAPTEUR_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
-  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24h en microsecondes, Timer wakeup : se réveille toutes les 24h
-
+  //esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24h en microsecondes, Timer wakeup : se réveille toutes les 24h
+  esp_sleep_enable_timer_wakeup(60ULL * 1000000ULL); // 1 min
 
 
   Serial.begin(115200);
@@ -353,15 +353,32 @@ void setup()
   prefs_param.begin("Parametre",true);
   b1 = prefs.getInt("magic0", 0); // le éro correspon à la valeur par défaut
   b2 = prefs.getInt("magic1", 0); // vérification premier passage
-  mqtt_set =prefs_param.getInt("changed",0);
-  missed_connexion = prefs.getInt("disconnect",0);
+  first_time =  ((b1 == MAGIC_VALUE1) && (b2 == MAGIC_VALUE2));
+  if (first_time)
+  {
+    prefs.putString("pw", "0");   
+    prefs.putString("ssid"," 0"); 
+    prefs_param.putInt("changed",0);
+    prefs_param.putInt("disconnect",0);
+    mqtt_set = 0;
+    missed_connexion = 0;
+  }
+  else 
+  {
+    mqtt_set =prefs_param.getInt("changed",0);
+    missed_connexion = prefs.getInt("disconnect",0);
+  }
   prefs_param.end();
 
-  first_time =  ((b1 == MAGIC_VALUE1) && (b2 == MAGIC_VALUE2));
-  wifi_can_connect = first_time || mqtt_set != 1 || missed_connexion !=2; // si JAMAIS initialsé, si utilisateur ne change de wifi, si n'est pas déconnecté
+  
+  wifi_can_connect = first_time && ( mqtt_set != 1 || missed_connexion !=2); // si JAMAIS initialsé, si utilisateur ne change de wifi, si n'est pas déconnecté
 
   if (wifi_can_connect) // connexion au wifi
   {
+    while(true)
+    {
+      Serial.println("hi");
+    }
     Serial.println("WiFi credentials found. Attempting to connect as STA.");
     // Lecture unique dans setup() pour initialiser la variable globale
     String globalSavedSSID = prefs.getString("ssid", ""); 
@@ -383,27 +400,34 @@ void setup()
 
   else // demande à l'utilisateur de se connecter
   {
+    
     Serial.println("No WiFi credentials found. Starting in AP mode to configure.");
     prefs.end(); 
     WiFi.mode(WIFI_MODE_AP);
     WiFi.softAP("esp32_config_AP", "12345678"); 
     Serial.print("AP IP address: ");
     Serial.println(WiFi.softAPIP());
-
     server.on("/", HTTP_GET, change_wifi);
     server.on("/saveWifi", HTTP_POST, handleSaveWifi);
     server.begin();
     Serial.println("Web server started.");
   }
 }
+//__________________________________________________________________________________________________________________________________________________________
 
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 void loop()
 {
-  if (wifi_can_connect) 
+  if (!wifi_can_connect) 
   {
-    server.handleClient();
+    
+    while (changed_done)
+    {
+      Serial.println("############################################");
+      server.handleClient();
+    }    
   }
-  if (cause == ESP_SLEEP_WAKEUP_EXT1 && WiFi.status() == WL_CONNECTED)
+  if (cause == ESP_SLEEP_WAKEUP_EXT1 && WiFi.status() == WL_CONNECTED) // je regarde si je suis connecté ici
   {
     digitalWrite(LED_PIN, HIGH); //
     // take a photoif (TimerCAM.Camera.get())
@@ -463,11 +487,14 @@ void loop()
   }
   client.publish("esp32/MineurBenNanna/receive_data","true");
   int time= millis();
+  client.loop();
   while (millis()-time<10000)
   {
-    client.loop();
+    
     //  permet de recevoir les messages pendant un laps de temps de 10 sec
   }
+  Serial.println("eteint");
   esp_deep_sleep_start();
   
 }
+//||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
