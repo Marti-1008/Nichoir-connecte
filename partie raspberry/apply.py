@@ -1,90 +1,238 @@
-# ============================
-# FICHIER : appli.py
-# Rôle : Serveur Flask pour configurer le Wi-Fi et les paramètres de la caméra ESP32
-# ============================
-
 from flask import Flask, render_template, request, redirect, url_for
+
 import os
+
 from sqlalchemy import create_engine
+
 from sqlalchemy.orm import sessionmaker
-from TablesMariaDB import CamParam, Wifi
+
+from TablesMariaDB import CamParametre, Wifi, Battrie, Image, Camera
+
 from datetime import datetime
 
+import paho.mqtt.client as mqtt
+
+import json
+ 
 app = Flask(__name__)
+ 
+engine = create_engine("mariadb+mariadbconnector://martin:1234@192.168.2.58:3306/RPG", echo=True)
 
-engine = create_engine("mariadb+mariadbconnector://martin:1234@192.168.2.45:3306/RPG", echo=True)
 Session = sessionmaker(bind=engine)
-id_param = 0
-id_wifi = 0
+ 
+# --- CONFIGURATION MQTT (Juste pour l'envoi) ---
 
-# ============================
-# PAGE PRINCIPALE "/"
-# ============================
-@app.route('/')
-def index():
-    # Récupère les images dans static/images/
-    image_folder = os.path.join(app.static_folder, "images")
-    images = [
-        f"images/{file}" for file in os.listdir(image_folder)
-        if file.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
-    ]
-    return render_template("index.html", images=images)
+# On ne dÃ©finit PAS de on_message ici, car c'est mariaDB.py qui gÃ¨re la rÃ©ception.
 
-# ============================
-# TRAITEMENT DES PARAMÈTRES ENVOYÉS PAR LE FORMULAIRE
-# ============================
-@app.route('/update_params', methods=['POST'])
-def update_params():
-    # Paramètres Wi-Fi
-    global id_param, id_wifi
-    id_wifi += 1
-    ssid = request.form.get('ssid')
-    password = request.form.get('password')
+cli = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-    # Paramètres
-    id_param += 1
-    resolution = request.form.get('resolution')
-    brightness = request.form.get('brightness')
-    contrast = request.form.get('contrast')
-    saturation = request.form.get('saturation')
-    quality = request.form.get('quality')
-    mirror = request.form.get('mirror')
-    flip = request.form.get('flip')
+cli.connect("192.168.2.58", 1883)
+
+cli.loop_start()
+ 
+def get_battery_data(cam_id):
 
     session = Session()
-    new_param = CamParam(
-        id=id_param,
-        resolution=resolution,
-        brightness=int(brightness),
-        contrast=int(contrast),
-        saturation=int(saturation),
-        quality=int(quality),
-        mirror=mirror,
-        flip=flip,
-        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    )
 
-    session.add(new_param)
-    session.commit()
+    donnees = session.query(Battrie).filter(Battrie.NumeroCam == cam_id).order_by(Battrie.date.asc()).limit(50).all()
 
-    new_param_wifi = Wifi(
-        id=id_wifi,
-        ssid=ssid,
-        pasword=password,
-        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    )
+    session.close()
+ 
+    labels = [d.date for d in donnees]
 
-    session.add(new_param_wifi)
-    session.commit()
+    levels = [d.poucentage for d in donnees]
 
-    # Exemple d’envoi vers l’ESP32 (à activer plus tard)
-    # import requests
-    # esp32_url = "http://192.168.1.50/config"
-    # requests.post(esp32_url, data=request.form)
+    voltages = [d.voltage for d in donnees]
+ 
+    return json.dumps(labels), json.dumps(levels), json.dumps(voltages)
+ 
+@app.route('/')
 
-    return redirect(url_for('index'))
+def index():
 
+    session = Session()
 
+    # 1. Menu dÃ©roulant : RÃ©cupÃ©rer toutes les camÃ©ras
 
+    cameras = session.query(Camera).all()
+
+    # 2. Quelle camÃ©ra afficher ?
+
+    cam_id_arg = request.args.get('cam_id', type=int)
+
+    selected_cam = None
+
+    if cameras:
+
+        if cam_id_arg:
+
+            for cam in cameras:
+
+                if cam.id == cam_id_arg:
+
+                    selected_cam = cam
+
+                    break
+
+        if not selected_cam:
+
+            selected_cam = cameras[0]
+
+    current_id = selected_cam.id if selected_cam else 0
+ 
+    # 3. DonnÃ©es pour la camÃ©ra sÃ©lectionnÃ©e
+
+    images_db = session.query(Image).filter(Image.NumeroCam == current_id).order_by(Image.date.desc()).all()
+
+    current_config = session.query(CamParametre).filter(CamParametre.NumeroCam == current_id).order_by(CamParametre.id.desc()).first()
+
+    session.close()
+ 
+    images_data = []
+
+    for img in images_db:
+
+        nom_fichier = os.path.basename(img.path)
+
+        images_data.append({"id": img.idi, "url": f"images/{nom_fichier}", "date": img.date})
+ 
+    dates_json, levels_json, voltages_json = get_battery_data(current_id)
+ 
+    return render_template("index.html", 
+
+                           images=images_data,
+
+                           dates_json=dates_json, 
+
+                           levels_json=levels_json, 
+
+                           voltages_json=voltages_json,
+
+                           cameras=cameras,          
+
+                           selected_cam=selected_cam, 
+
+                           config=current_config)
+ 
+@app.route('/delete_image/<int:image_id>', methods=['POST'])
+
+def delete_image(image_id):
+
+    session = Session()
+
+    image_to_delete = session.query(Image).filter_by(idi=image_id).first()
+
+    if image_to_delete:
+
+        try:
+
+            if os.path.exists(image_to_delete.path):
+
+                os.remove(image_to_delete.path)
+
+        except Exception as e:
+
+            print(f"Erreur suppression fichier : {e}")
+ 
+        session.delete(image_to_delete)
+
+        session.commit()
+
+    session.close()
+
+    return redirect(url_for('index'))    
+
+@app.route('/update_params', methods=['POST'])
+
+def update_params():
+
+    cam_id = request.form.get('cam_id', type=int) # L'ID vient du formulaire cachÃ© ou du select
+
+    # Si cam_id est None, on ne peut rien faire
+
+    if not cam_id:
+
+        return redirect(url_for('index'))
+ 
+    ssid = request.form.get('ssid')
+
+    password = request.form.get('password')
+ 
+    resolution = request.form.get('resolution')
+
+    brightness = request.form.get('brightness')
+
+    contrast = request.form.get('contrast')
+
+    saturation = request.form.get('saturation')
+
+    quality = request.form.get('quality')
+
+    mirror = request.form.get('mirror')
+
+    flip = request.form.get('flip')
+ 
+    mirror_val = 1 if mirror else 0
+
+    flip_val = 1 if flip else 0
+ 
+    session = Session()
+
+    if ssid:
+
+        new_param_wifi = Wifi(NumeroCam=cam_id, ssid=ssid, pasword=password, date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        session.add(new_param_wifi)
+ 
+    try:
+
+        new_param = CamParametre(
+
+            NumeroCam=cam_id,
+
+            resolution=resolution,
+
+            brightness=int(brightness) if brightness else 0,
+
+            contrast=int(contrast) if contrast else 0,
+
+            saturation=int(saturation) if saturation else 0,
+
+            quality=int(quality) if quality else 10,
+
+            mirror=mirror_val,
+
+            flip=flip_val,
+
+            date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        )
+
+        session.add(new_param)
+
+        session.commit()
+
+        # Envoi MQTT : On cible la camÃ©ra spÃ©cifique ou le topic gÃ©nÃ©ral
+
+        # Pour faire simple, on envoie le signal d'update
+
+        topic_update = f"B3/MartinOmar/{cam_id}/parametre/camera/update"
+
+        cli.publish(topic_update, "update")
+
+    except Exception as e:
+
+        print(f"Erreur enregistrement : {e}")
+
+        session.rollback()
+
+    finally:
+
+        session.close()
+ 
+    return redirect(url_for('index', cam_id=cam_id))
+ 
 if __name__ == "__main__":
-    app.run(debug=True)
+
+    app.run(host="0.0.0.0", port=5000, debug=True)
+ 
