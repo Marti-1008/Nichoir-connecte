@@ -1,93 +1,285 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32-CAM Control Panel</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32-CAM Control Panel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
+ 
 <body class="flex h-screen bg-gray-100">
+ 
+  <div class="w-80 bg-slate-800 text-white flex flex-col p-6 space-y-5 h-full overflow-y-auto">
+<h2 class="text-xl font-bold mb-2">ESP32 Dashboard</h2>
+ 
+    <div class="mb-4">
+<label class="text-xs text-gray-400">CamÃ©ra affichÃ©e :</label>
+<form action="/" method="GET">
+<select name="cam_id" onchange="this.form.submit()" class="w-full p-2 rounded text-black text-sm font-bold bg-yellow-100 border border-yellow-300">
 
-  <!-- ============================
-       BARRE LATÉRALE : CONFIGURATION ESP32
-  ============================ -->
-  <div class="w-80 bg-slate-800 text-white flex flex-col p-6 space-y-5">
-    <h2 class="text-xl font-bold mb-4">Configuration ESP32-CAM</h2>
+                {% for cam in cameras %}
+<option value="{{ cam.id }}" {% if selected_cam and selected_cam.id == cam.id %}selected{% endif %}>
 
-    <form method="POST" action="/update_params" class="flex flex-col space-y-3">
+                    {{ cam.Nom }} (ID: {{ cam.id }})
+</option>
 
-      <!-- Paramètres Wi-Fi -->
-      <h3 class="text-lg font-semibold border-b border-slate-600 pb-1">Wi-Fi</h3>
-      <label>SSID</label>
-      <input type="text" name="ssid" class="p-2 rounded text-black" placeholder="Nom du réseau Wi-Fi">
+                {% endfor %}
+</select>
+</form>
+</div>
+ 
+    <div class="flex flex-col gap-2 border-b border-slate-600 pb-4">
+<button onclick="showTab('gallery')" id="btn-gallery" class="bg-blue-600 text-white p-2 rounded text-left font-semibold hover:bg-blue-500 transition">
 
-      <label>Mot de passe</label>
-      <input type="password" name="password" class="p-2 rounded text-black" placeholder="••••••••••">
+            Galerie Images
+</button>
+<button onclick="showTab('stats')" id="btn-stats" class="bg-slate-700 text-gray-300 p-2 rounded text-left font-semibold hover:bg-blue-500 hover:text-white transition">
 
-      <!-- Paramètres caméra -->
-      <h3 class="text-lg font-semibold border-b border-slate-600 pt-4 pb-1">Caméra</h3>
+            Graphiques Batterie
+</button>
+</div>
+ 
+    <h2 class="text-lg font-bold mt-2">Configuration</h2>
+<form method="POST" action="/update_params" class="flex flex-col space-y-3">
+<h3 class="text-sm font-semibold text-gray-400">Wi-Fi</h3>
+<input type="text" name="ssid" class="p-2 rounded text-black text-sm" placeholder="SSID">
+<input type="password" name="password" class="p-2 rounded text-black text-sm" placeholder="Mot de passe">
+ 
+      <h3 class="text-sm font-semibold text-gray-400 mt-2">Camera</h3>
+<label class="text-xs">Source Camera</label>
+<select name="cam_id" class="p-2 rounded text-black text-sm mb-2">
+<option value="0">Camera Principale (0)</option>
+<option value="1">Camera Secondaire (1)</option>
+</select>
+<label class="text-xs">Resolution</label>
+<select name="resolution" class="p-2 rounded text-black text-sm">
+<option value="QVGA (320x240)">QVGA (320x240)</option>
+<option value="VGA (640x480)">VGA (640x480)</option>
+<option value="SVGA (800x600)">SVGA (800x600)</option>
+<option value="XGA (1024x768)">XGA (1024x768)</option>
+<option value="UXGA (1600x1200)">UXGA (1600x1200)</option>
+</select>
+ 
+      <label class="text-xs">Luminosite / Contraste / Saturation</label>
+<div class="grid grid-cols-3 gap-2">
+<input type="range" name="brightness" min="-2" max="2" value="0" title="Luminosite">
+<input type="range" name="contrast" min="-2" max="2" value="0" title="Contraste">
+<input type="range" name="saturation" min="-2" max="2" value="0" title="Saturation">
+</div>
+ 
+      <label class="text-xs">Qualite (0-63)</label>
+<input type="number" name="quality" min="0" max="63" value="10" class="p-2 rounded text-black text-sm">
+ 
+      <div class="flex items-center space-x-2 mt-2">
+<input type="checkbox" name="mirror" id="mirror">
+<label for="mirror" class="text-sm">Miroir</label>
+<input type="checkbox" name="flip" id="flip" class="ml-4">
+<label for="flip" class="text-sm">Flip</label>
+</div>
+ 
+      <button type="submit" class="bg-green-600 hover:bg-green-700 text-white py-2 rounded mt-4 font-semibold">
 
-      <!-- Résolution -->
-      <label>Résolution</label>
-      <select name="resolution" class="p-2 rounded text-black">
-        <option value="QVGA (320x240)">QVGA (320x240)</option>
-        <option value="VGA (640x480)">VGA (640x480)</option>
-        <option value="SVGA (800x600)">SVGA (800x600)</option>
-        <option value="XGA (1024x768)">XGA (1024x768)</option>
-        <option value="SXGA (1280x1024)">SXGA (1280x1024)</option>
-        <option value="UXGA (1600x1200)">UXGA (1600x1200)</option>
-      </select>
+        Envoyer
+</button>
+</form>
+</div>
+ 
+  <div class="flex-1 overflow-y-auto p-6 relative">
+ 
+  <div id="tab-gallery" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-      <!-- Luminosité -->
-      <label>Luminosité</label>
-      <input type="range" name="brightness" min="-2" max="2" value="0" class="w-full">
+    {% for img in images %}
+<div class="bg-white rounded-lg shadow-md p-2 relative group">
+<div class="flex items-center justify-center h-60 bg-gray-100 rounded overflow-hidden">
+<img src="{{ url_for('static', filename=img.url) }}" class="object-contain max-h-full">
+</div>
+ 
+      <div class="mt-2 text-xs text-gray-500 text-center">
 
-      <!-- Contraste -->
-      <label>Contraste</label>
-      <input type="range" name="contrast" min="-2" max="2" value="0" class="w-full">
+        {{ img.date }}
+</div>
+ 
+      <form action="/delete_image/{{ img.id }}" method="POST" onsubmit="return confirm('Voulez-vous vraiment supprimer cette image ?');">
+<button type="submit" 
 
-      <!-- Saturation -->
-      <label>Saturation</label>
-      <input type="range" name="saturation" min="-2" max="2" value="0" class="w-full">
+                  class="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition shadow hover:bg-red-700"
 
-      <!-- Qualité JPEG -->
-      <label>Qualité JPEG</label>
-      <input type="number" name="quality" min="10" max="63" value="30" class="p-2 rounded text-black">
-
-      <!-- Miroir / Flip -->
-      <div class="flex items-center space-x-2">
-        <input type="checkbox" name="mirror" id="mirror">
-        <label for="mirror">Miroir horizontal</label>
-      </div>
-
-      <div class="flex items-center space-x-2">
-        <input type="checkbox" name="flip" id="flip">
-        <label for="flip">Rotation verticale</label>
-      </div>
-
-      <!-- Bouton -->
-      <button type="submit"
-              class="bg-green-600 hover:bg-green-700 text-white py-2 rounded mt-4 font-semibold">
-        Envoyer au module
-      </button>
-    </form>
-  </div>
-
-  <!-- ============================
-       ZONE PRINCIPALE : IMAGES CAPTURÉES
-  ============================ -->
-  <div class="flex-1 overflow-y-auto p-6">
-    <h1 class="text-2xl font-semibold mb-4">Images capturées</h1>
-
-    <div id="gallery" class="grid grid-cols-3 gap-4">
-      {% for img in images %}
-      <div class="bg-white rounded-lg shadow-md p-2 flex items-center justify-center">
-        <img src="{{ url_for('static', filename=img) }}" class="rounded max-h-60 object-contain">
-      </div>
-      {% endfor %}
+                  title="Supprimer l'image">
+<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+</svg>
+</button>
+</form>
+ 
     </div>
-  </div>
 
+    {% else %}
+<p class="text-gray-500 col-span-3 text-center">Aucune image trouvee.</p>
+
+    {% endfor %}
+</div>
+ 
+    <div id="tab-stats" class="hidden">
+<h1 class="text-2xl font-semibold mb-6 text-gray-800">Suivi de la Batterie</h1>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="bg-white p-4 rounded-lg shadow-lg">
+<h3 class="text-lg font-bold mb-4 text-green-600">Niveau de charge (%)</h3>
+<div class="relative h-64 w-full">
+<canvas id="chartLevel"></canvas>
+</div>
+</div>
+ 
+            <div class="bg-white p-4 rounded-lg shadow-lg">
+<h3 class="text-lg font-bold mb-4 text-orange-600">Tension (Volts)</h3>
+<div class="relative h-64 w-full">
+<canvas id="chartVoltage"></canvas>
+</div>
+</div>
+</div>
+</div>
+ 
+  </div>
+ 
+  <script>
+
+    // --- 1. GESTION DES ONGLETS ---
+
+    function showTab(tabName) {
+
+        const gallery = document.getElementById('tab-gallery');
+
+        const stats = document.getElementById('tab-stats');
+
+        const btnGallery = document.getElementById('btn-gallery');
+
+        const btnStats = document.getElementById('btn-stats');
+ 
+        if (tabName === 'gallery') {
+
+            gallery.classList.remove('hidden');
+
+            stats.classList.add('hidden');
+
+            // Styles boutons
+
+            btnGallery.classList.add('bg-blue-600', 'text-white');
+
+            btnGallery.classList.remove('bg-slate-700', 'text-gray-300');
+
+            btnStats.classList.add('bg-slate-700', 'text-gray-300');
+
+            btnStats.classList.remove('bg-blue-600', 'text-white');
+
+        } else {
+
+            gallery.classList.add('hidden');
+
+            stats.classList.remove('hidden');
+ 
+            // Styles boutons
+
+            btnStats.classList.add('bg-blue-600', 'text-white');
+
+            btnStats.classList.remove('bg-slate-700', 'text-gray-300');
+
+            btnGallery.classList.add('bg-slate-700', 'text-gray-300');
+
+            btnGallery.classList.remove('bg-blue-600', 'text-white');
+
+        }
+
+    }
+ 
+    // --- 2. CONFIGURATION DES GRAPHIQUES ---
+
+    // RÃƒÂ©cupÃƒÂ©ration des donnÃƒÂ©es injectÃƒÂ©es par Flask (safe filter est crucial)
+
+    const labelsData = {{ dates_json | safe }};
+
+    const levelData = {{ levels_json | safe }};
+
+    const voltageData = {{ voltages_json | safe }};
+ 
+    // Graphique Pourcentage
+
+    new Chart(document.getElementById('chartLevel'), {
+
+        type: 'line',
+
+        data: {
+
+            labels: labelsData,
+
+            datasets: [{
+
+                label: 'Batterie (%)',
+
+                data: levelData,
+
+                borderColor: '#16a34a', // Green-600
+
+                backgroundColor: 'rgba(22, 163, 74, 0.1)',
+
+                fill: true,
+
+                tension: 0.3
+
+            }]
+
+        },
+
+        options: {
+
+            responsive: true,
+
+            maintainAspectRatio: false,
+
+            scales: { y: { beginAtZero: true, max: 100 } }
+
+        }
+
+    });
+ 
+    // Graphique Voltage
+
+    new Chart(document.getElementById('chartVoltage'), {
+
+        type: 'line',
+
+        data: {
+
+            labels: labelsData,
+
+            datasets: [{
+
+                label: 'Tension (V)',
+
+                data: voltageData,
+
+                borderColor: '#ea580c', // Orange-600
+
+                backgroundColor: 'rgba(234, 88, 12, 0.1)',
+
+                fill: true,
+
+                tension: 0.3
+
+            }]
+
+        },
+
+        options: {
+
+            responsive: true,
+
+            maintainAspectRatio: false
+
+        }
+
+    });
+</script>
+ 
 </body>
 </html>
+ 
