@@ -33,21 +33,10 @@ Preferences prefs;
 //=======================================================================================================================================================
 //Structure used to change the caracteristic of the picture 
 struct CameraSettings {
-    framesize_t frameSizes[15] = { // different picture formats
-        FRAMESIZE_96X96,
+    framesize_t frameSizes[4] = { // different picture formats
         FRAMESIZE_QQVGA,
-        FRAMESIZE_128X128,
-        FRAMESIZE_QCIF,
-        FRAMESIZE_HQVGA,
-        FRAMESIZE_240X240,
-        FRAMESIZE_QVGA,
-        FRAMESIZE_320X320,
-        FRAMESIZE_CIF,
-        FRAMESIZE_HVGA,
         FRAMESIZE_VGA,
         FRAMESIZE_XGA,
-        FRAMESIZE_HD,
-        FRAMESIZE_SXGA,
         FRAMESIZE_UXGA
     };
 
@@ -128,23 +117,6 @@ void callback(char* topic, byte* payload, unsigned int length)
 
     prefs_param.putInt("set_brightness",atoi(brightness));
   }
-  else if (strcmp(topic,"B3/MartinOmar/1/parametre/wifi/password") == 0)
-  {
-    char password[length+1];
-    memcpy(password, payload, length);
-    password[length]='\0';
-
-    prefs_param.putString("set_password",password);
-    
-  }
-  else if (strcmp(topic,"B3/MartinOmar/1/parametre/wifi/ssid") == 0)
-  {
-    
-    char ssid[length+1];
-    memcpy(ssid, payload, length);
-    ssid[length]='\0';
-    prefs_param.putString("set_ssid",ssid);
-  }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/resolution") == 0)
   {
     char res[length+1];
@@ -193,7 +165,7 @@ void change_wifi()
   Merci d avoir choisi notre <strong>nichoir connecté</strong> ! <br> Grace à vous, vos petits amis à plumes vont gazouiller en toute tranquilite, et nous, on peut continuer à faire 
   <em>ronronner nos serveurs</em> pour que tout fonctionne parfaitement.<br>Nous esperons que votre nichoir vous apportera autant de joie que les oiseaux apportent de chansons au matin.<br> Merci de faire partie de notre volee de passionnes ! <br>
   <br> Avec toute notre gratitude, <strong>Martin &amp; Omar</strong>  </p> 
-  <p style="text-align:left; color:white; font-family: Arial, sans-serif;"> Ce projet de nichoir connecte est un porjet open source qui a pour but de partager différentes photos d'oiseaux à traversle monde. <br> Sur le site web de notre companie vous pourrez retrouver toutes
+  <p style="text-align:left; color:white; font-family: Arial, sans-serif;"> Ce projet de nichoir connecte est un porjet open source qui a pour but de partager différentes photos d'oiseaux à travers le monde. <br> Sur le site web de notre companie vous pourrez retrouver toutes
   les cameras utilisees à travers le monde. De plus contrairement à nos concurents, notre système permet une configuration rapide et efficace des caméras à chaque instant. 
   <div style="text-align: right; color : 
   white ;"><address>Contact : <a href="martin.mineur@student.hepl.be">Martin</a> ou <a href="Omar.benanna@student.hepl.be">Omar</a></address></div> 
@@ -206,10 +178,7 @@ void change_wifi()
 //It sent data from the webserver of the ESP32 are read. This data are written in the ESP32. When done, it changes the magic bytes if it is the first time. 
 void handleSaveWifi()
 {
-  // if (WiFi.status() == WL_CONNECTED)
-  // {
-  //   WiFi.disconnect(); //If the user wants to change the wifi, it's necessary 
-  // }
+
   String ssidStr = server.arg("ssid"); //It received the data from the website
   String pwdStr = server.arg("pw");
 
@@ -340,8 +309,6 @@ void sub()
     client.subscribe("B3/MartinOmar/1/parametre/camera/contrast");
     client.subscribe("B3/MartinOmar/1/parametre/camera/saturation");
     client.subscribe("B3/MartinOmar/1/parametre/camera/quality");
-    client.subscribe("B3/MartinOmar/1/parametre/wifi/ssid");
-    client.subscribe("B3/MartinOmar/1/parametre/wifi/password");
     client.setCallback(callback);
   }
 }
