@@ -17,8 +17,8 @@
 #define batterie_ADC 33 // GPIO of the battery
 #define LED_PIN     4   // GPIO of the led
 #define CAPTEUR_PIN 13  // GPIO of the sensor PIR
-#define MAGIC_VALUE1 0x34 
-#define MAGIC_VALUE2 0x48
+#define MAGIC_VALUE1 0x30
+#define MAGIC_VALUE2 0x47
 #define SSID_MAX_LEN 32
 #define PASS_MAX_LEN 64
 
@@ -35,6 +35,7 @@ Preferences prefs;
 struct CameraSettings {
     framesize_t frameSizes[4] = { // different picture formats
         FRAMESIZE_QQVGA,
+        
         FRAMESIZE_VGA,
         FRAMESIZE_XGA,
         FRAMESIZE_UXGA
@@ -95,36 +96,52 @@ void callback(char* topic, byte* payload, unsigned int length)
   Serial.println("reception de messages");
   if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/contrast") == 0)
   {
-    char contrast[length+1];
-    memcpy(contrast, payload, length);
-    contrast[length]='\0';
+    int value = atoi((char*)payload);
+    if (-3<value && value<3)
+    {
+      char contrast[length+1];
+      memcpy(contrast, payload, length);
+      contrast[length]='\0';
 
-    prefs_param.putInt("set_contrast",atoi(contrast));
+      prefs_param.putInt("set_contrast",atoi(contrast));
+    }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/saturation") == 0)
   {
-    char saturation[length+1];
-    memcpy(saturation, payload, length);
-    saturation[length]='\0';
+    int value = atoi((char*)payload);
+    if (-3<value && value<3)
+    {
+      char saturation[length+1];
+      memcpy(saturation, payload, length);
+      saturation[length]='\0';
 
-    prefs_param.putInt("set_saturation",atoi(saturation));
+      prefs_param.putInt("set_saturation",atoi(saturation));
+    }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/brightness") == 0)
   {
-    char brightness[length+1];
-    memcpy(brightness, payload, length);
-    brightness[length]='\0';
+    int value = atoi((char*)payload);
+    if (-3<value && value<3)
+    {
+      char brightness[length+1];
+      memcpy(brightness, payload, length);
+      brightness[length]='\0';
 
-    prefs_param.putInt("set_brightness",atoi(brightness));
+      prefs_param.putInt("set_brightness",atoi(brightness));
+    }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/resolution") == 0)
   {
-    char res[length+1];
-    memcpy(res, payload, length);
-    res[length]='\0';
-   
-    int res_index = atoi(res); 
-    prefs_param.putInt("resolution",res_index);
+    int value = atoi((char*)payload);
+    if (-1<value && value<3)
+    {
+      char res[length+1];
+      memcpy(res, payload, length);
+      res[length]='\0';
+    
+      int res_index = atoi(res); 
+      prefs_param.putInt("resolution",res_index);
+    }
   } 
 }
 //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
@@ -136,40 +153,112 @@ void callback(char* topic, byte* payload, unsigned int length)
 void change_wifi()
 {
   server.send(200, "text/html",
-  R"rawliteral( <!DOCTYPE html> <html lang="fr"> 
-  <head charset="UTF-8"> <body style="background-color:#1A1615"> 
-  <h1 style="text-align: center; text-decoration: underline;color : white ;"> Assignation du nouveau wifi pour le nichoir connecte </h1>
-  <h2 style="text-align: center;color : white ;"> By <strong> Martin &; Omar</strong></h2> 
-  <div style=" color : white ;text-align:center "> Ici, formater la configuration du wifi,</div> 
-  <div style="color: red;text-align: center;"> <strong> cette opération est définitive </strong></div> 
-  <div style="text-align:center;color : white ;"> Si vous vous etes trompes, veuillez contacter le support IT à l'adresse ci-dessous</div> 
-  <div style="text-align:center;color : white ;"> Cette opération est delicate : pour cela nous vous conseillons de vous poser et de ne pas vous tromper dans la configuration du wifi</div> 
-  <h2 style="text-align: center;color: white;"> Encodage du wifi</h2> 
-  <table > 
-  <form method="POST" action="/saveWifi" style="text-align: center; margin-top: 20px;">
-   <div style="margin-bottom: 10px; color: white;"text-align: center;">
-      <label for="ssid">Nom du WiFi :</label>
-      <input type="text" id="ssid" name="ssid">
-    </div>
-    <div style="margin-bottom: 10px; color: white; text-align: center;">
-      <label for="pw">Mot de passe :</label>
-      <input type="password" id="pw" name="pw">
-    </div>
-    <div>
-      <input type="submit" value="Enregistrer">
-    </div>
-  </form>
+    R"rawliteral(
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head charset="UTF-8">
+    <style>
+      body {
+        background-color: #1A1615;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+      h1, h2 {
+        text-align: center;
+      }
+      form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 20px;
+      }
+      .form-group {
+        margin-bottom: 10px;
+        text-align: center;
+      }
+      input[type="text"], input[type="password"] {
+        width: 200px;
+        padding: 5px;
+      }
+      input[type="submit"] {
+        padding: 8px 20px;
+        margin-top: 10px;
+      }
+    </style>
+    </head>
+    <body>
+      <h1 style="text-decoration: underline;">Assignation du nouveau wifi pour le nichoir connecte</h1>
+      <h2>By <strong>Martin & Omar</strong></h2>
+      <div style="text-align:center;">Ici, formater la configuration du wifi</div>
+      <div style="color: red; text-align:center;"><strong>Cette operation est definitive</strong></div>
+      <div style="text-align:center;">Si vous vous êtes trompes, veuillez contacter le support IT à l'adresse ci-dessous</div>
+      <div style="text-align:center;">Cette operation est delicate : pour cela nous vous conseillons de vous poser et de ne pas vous tromper dans la configuration du wifi</div>
+      
+      <h2 style="text-align: center;">Encodage du wifi</h2>
 
-  </table> 
-  <p style="text-align:left; color:white; font-family: Arial, sans-serif;"> 
-  Merci d avoir choisi notre <strong>nichoir connecté</strong> ! <br> Grace à vous, vos petits amis à plumes vont gazouiller en toute tranquilite, et nous, on peut continuer à faire 
-  <em>ronronner nos serveurs</em> pour que tout fonctionne parfaitement.<br>Nous esperons que votre nichoir vous apportera autant de joie que les oiseaux apportent de chansons au matin.<br> Merci de faire partie de notre volee de passionnes ! <br>
-  <br> Avec toute notre gratitude, <strong>Martin &amp; Omar</strong>  </p> 
-  <p style="text-align:left; color:white; font-family: Arial, sans-serif;"> Ce projet de nichoir connecte est un porjet open source qui a pour but de partager différentes photos d'oiseaux à travers le monde. <br> Sur le site web de notre companie vous pourrez retrouver toutes
-  les cameras utilisees à travers le monde. De plus contrairement à nos concurents, notre système permet une configuration rapide et efficace des caméras à chaque instant. 
-  <div style="text-align: right; color : 
-  white ;"><address>Contact : <a href="martin.mineur@student.hepl.be">Martin</a> ou <a href="Omar.benanna@student.hepl.be">Omar</a></address></div> 
-  </body> </head> </html>)rawliteral");
+      <form method="POST" action="/saveWifi">
+        <div class="form-group">
+          <label for="ssid">Nom du WiFi :</label><br>
+          <input type="text" id="ssid" name="ssid" required>
+        </div>
+
+        <div class="form-group">
+          <label for="pw">Mot de passe :</label><br>
+          <input type="password" id="pw" name="pw" required>
+        </div>
+
+        <div class="form-group">
+          <!-- Hidden pour envoyer 0 si non coché -->
+          <input type="hidden" name="noPassword" value="0">
+          <label>
+            <input type="checkbox" id="noPasswordCheckbox" name="noPassword" value="1" onclick="togglePassword()">
+            Réseau sans mot de passe
+          </label>
+        </div>
+
+        <div class="form-group">
+          <input type="submit" value="Enregistrer">
+        </div>
+      </form>
+
+      <p>
+        Merci d'avoir choisi notre <strong>nichoir connecté</strong> !<br>
+        Grace à vous, vos petits amis à plumes vont gazouiller en toute tranquillite, et nous, on peut continuer à faire 
+        <em>ronronner nos serveurs</em> pour que tout fonctionne parfaitement.<br>
+        Nous esperons que votre nichoir vous apportera autant de joie que les oiseaux apportent de chansons au matin.<br>
+        Merci de faire partie de notre volée de passionnés !<br><br>
+        Avec toute notre gratitude, <strong>Martin &amp; Omar</strong>
+      </p>
+
+      <p>
+        Ce projet de nichoir connecte est un projet open source qui a pour but de partager differentes photos d'oiseaux à travers le monde.<br>
+        Sur le site web de notre compagnie vous pourrez retrouver toutes les cameras utilisées à travers le monde. De plus contrairement à nos concurrents, notre systeme permet une configuration rapide et efficace des cameras à chaque instant.
+      </p>
+
+      <div style="text-align: right;">
+        <address>
+          Contact : <a href="mailto:martin.mineur@student.hepl.be">Martin</a> ou 
+          <a href="mailto:Omar.benanna@student.hepl.be">Omar</a>
+        </address>
+      </div>
+
+      <script>
+        function togglePassword() {
+          const pwInput = document.getElementById("pw");
+          const checkbox = document.getElementById("noPasswordCheckbox");
+          if (checkbox.checked) {
+            pwInput.value = "";
+            pwInput.disabled = true;
+            pwInput.required = false;
+          } else {
+            pwInput.disabled = false;
+            pwInput.required = true;
+          }
+        }
+      </script>
+    </body>
+    </html>
+    )rawliteral");
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -180,10 +269,20 @@ void handleSaveWifi()
 {
 
   String ssidStr = server.arg("ssid"); //It received the data from the website
-  String pwdStr = server.arg("pw");
+  String choice = server.arg("noPassword");
+  if (choice =="0")
+  {
+    String pwdStr = server.arg("pw");
+    Serial.println("Reçu Password : " + pwdStr);
+     prefs.putString("pw", pwdStr);  //It writes the password in the memory of the ESP32 
+  }
+  
+  
 
   Serial.println("Reçu SSID : " + ssidStr); 
-  Serial.println("Reçu Password : " + pwdStr);
+  
+   Serial.println("Reçu choix : " + choice);
+
 
 
   if (first_time) 
@@ -192,8 +291,10 @@ void handleSaveWifi()
     prefs.putInt("magic1", MAGIC_VALUE2);
     
   }
-  prefs.putString("pw", pwdStr);  //It writes the password and the wifi in the memory of the ESP32 
+  //It writes the coice and the wifi in the memory of the ESP32 
   prefs.putString("ssid", ssidStr); 
+  prefs.putString("choice", choice); 
+
 
   server.send(200, "text/html", R"rawliteral( <!DOCTYPE html>
   <html lang="fr">
@@ -213,7 +314,7 @@ void handleSaveWifi()
   </body>
   </html>>)rawliteral"); //Confirm the right reception of the password and the name of the wifi
   
-  prefs_param.putInt("changed",0);
+  
   prefs.putInt("disconnect",0);
   changed_done = false;
 }
@@ -225,11 +326,25 @@ void handleSaveWifi()
 
 //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 //to connexion of the ESP32 to the wifi
-void connectToWiFi(const char* ssid, const char* password) {
-    Serial.printf("Connecting to %s ", ssid);
-    WiFi.begin(ssid, password);
+void connectToWiFi() {
+    String globalSavedSSID = prefs.getString("ssid", "O"); //Get the password and the name of the wifi from the memory
+    String savedPW = prefs.getString("pw", "0");
+    String choice = prefs.getString("choice", "");
+    if (choice=="1")
+    {
+      WiFi.begin(globalSavedSSID.c_str(), savedPW.c_str());
+      Serial.println("Wifi sécurisé");
+    }
+    else
+    {
+      WiFi.begin(globalSavedSSID.c_str());
+      Serial.println("Wifi non sécurisé");
+    }
+
+    Serial.printf("Connecting to ", globalSavedSSID.c_str());
+    
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) //It trys connecting to the wifi for 5 seconds 
+    while (WiFi.status() != WL_CONNECTED && attempts < 15) //It trys connecting to the wifi for 5 seconds 
     {
         delay(500);
         Serial.print(".");
@@ -255,6 +370,7 @@ void connectToWiFi(const char* ssid, const char* password) {
       prefs_param.end();
       prefs.end();
       Serial.println("DORS");
+      Serial.flush(); 
       esp_deep_sleep_start(); //It goes to deep sleep
     }
 }
@@ -273,19 +389,20 @@ void Setcam()
   uint8_t value_saturation = prefs_param.getInt("set_saturation",0);
   uint8_t value_brightness = prefs_param.getInt("set_brightness",0);
   Serial.println(value_qualite);
-  if (TimerCAM.Camera.sensor == NULL) {       //Security of the camera if the camera does not start correctly
-  Serial.println("Erreur: Capteur non initialisé !");       
-  return;  
+  if (TimerCAM.Camera.sensor == NULL)  //Security of the camera if the camera does not start correctly
+  {      
+    Serial.println("Erreur: Capteur non initialisé !"); 
+    prefs_param.end();
+    prefs.end();
+    Serial.println("DORS");
+    Serial.flush(); 
+    esp_deep_sleep_start(); //It goes to deep sleep      
   }
   camSettings.setContrast(value_contrast);
   
   camSettings.setSaturation(value_saturation);
   
   camSettings.setBrightness(value_brightness);
-  
-  camSettings.setMirror(value_mirror);
-  
-  camSettings.setFlip(value_flip);
   
   camSettings.setFrameSize(value_qualite);  
 
@@ -311,6 +428,14 @@ void sub()
     client.subscribe("B3/MartinOmar/1/parametre/camera/quality");
     client.setCallback(callback);
   }
+  else
+  {
+    prefs_param.end();
+    prefs.end();
+    Serial.println("DORS");
+    Serial.flush(); 
+    esp_deep_sleep_start(); //It goes to deep sleep
+  }
 }
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
@@ -325,19 +450,17 @@ void connect_TO_mqtt()
   uint8_t index = 0;
   while (!(client.connected() or index == 10))
   {
-    if (client.connect("ESP32CAM")) 
-    {
-      Serial.println("connected");
-    }
     Serial.println("Tentative de connecion");
     index +=1;
     delay(500);
   }
   if (index==10) 
   {
-    Serial.println("SOMMEIL");
+    
     prefs_param.end();
     prefs.end();
+    Serial.println("SOMMEIL");
+    Serial.flush(); 
     esp_deep_sleep_start();
   }
 }
@@ -360,7 +483,7 @@ void configure_ESP32()
   pinMode(CAPTEUR_PIN, INPUT);
   gpio_pulldown_en((gpio_num_t)CAPTEUR_PIN);// it is used so that the pin is not floating
   gpio_pullup_dis((gpio_num_t)CAPTEUR_PIN);
-  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
+  
 }
 //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
 
@@ -485,7 +608,7 @@ void setup()
 
   else  //The ESP32 can connect to the wifi
   {
-    
+    esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
     lecture = prefs.getString("LECTURE", "LOW");
     if (lecture=="HIGH")
     {
@@ -501,29 +624,30 @@ void setup()
       //This wake up is due to the second wake up. It allows the ESP32 to wake up if the sensor PIR detects motion
       prefs.putString("LECTURE", "HIGH"); 
       esp_sleep_enable_ext1_wakeup((1ULL << CAPTEUR_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
-      Serial.println("mode haut");
       prefs_param.end();
       prefs.end();
+      Serial.println("mode haut");
+      Serial.flush(); 
       esp_deep_sleep_start();
     }
 
 
     Serial.println("WiFi credentials found. Attempting to connect as STA.");
-    String globalSavedSSID = prefs.getString("ssid", ""); //Get the password and the name of the wifi from the memory
-    String savedPW = prefs.getString("pw", "");
+    
      
     
     WiFi.mode(WIFI_STA);  //Connexion of the ESP32 to the wifi
-    connectToWiFi(globalSavedSSID.c_str(), savedPW.c_str());  //It called the function "connectToWiFi" to try to connect to the wifi
+    connectToWiFi();  //It called the function "connectToWiFi" to try to connect to the wifi
     connect_TO_mqtt();   //It called the function connect_to_mqtt to try to connect to the broker
     sub(); //It subscribe to some topics
 
-    client.setBufferSize(4096); //It increases the size of the buffer
+    
 
     if (cause == ESP_SLEEP_WAKEUP_EXT1 ) //If the wake up is due to sensor PIR
     {
       String lecture =prefs.getString("LECTURE","0");
       Setcam(); //It configures the camera
+      client.setBufferSize(4096); //It increases the size of the buffer
     }
   }
   TimerCAM.Power.setLed(0); //Turn off the LED of the ESP32
@@ -544,7 +668,7 @@ void loop()
       
       while (changed_done)//It called the function until the user encodes datas
       {
-        server.handleClient();
+        server.handleClient(); //continuously checks for incoming HTTP requests and calls the appropriate handler functions you defined with server.on().
       }    
     }
 
@@ -566,6 +690,14 @@ void loop()
         size_t size = TimerCAM.Camera.fb->len; //Length of the picture
         send_picture(img ,size );  //The function "send_picture" sends data to the broker mqtt
       }
+      else 
+      {
+         prefs_param.end();
+        prefs.end();
+        Serial.println("eteint");
+        Serial.flush(); 
+        esp_deep_sleep_start(); //go to the deep sleep
+      }
       Serial.println("passage");
       digitalWrite(LED_PIN, LOW);//It turns off the infrared LED on the PCB
 
@@ -576,6 +708,14 @@ void loop()
     {
       battery();
     }
+    else
+    {
+      prefs_param.end();
+      prefs.end();
+      Serial.println("eteint du à une perte de connexion");
+      Serial.flush(); 
+      esp_deep_sleep_start(); //go to the deep sleep
+    }
 
 
     int time= millis();
@@ -585,9 +725,11 @@ void loop()
       client.loop();
     }
   
-  Serial.println("eteint");
+  
   prefs_param.end();
   prefs.end();
+  Serial.println("eteint");
+  Serial.flush(); 
   esp_deep_sleep_start(); //go to the deep sleep
 
 }
