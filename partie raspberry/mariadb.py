@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from TablesMariaDB import Image, Battrie, Wifi, CamParametre, Camera
+from TablesMariaDB import Image, Battrie, CamParametre, Camera
 import paho.mqtt.client as client
 from datetime import datetime
 import time

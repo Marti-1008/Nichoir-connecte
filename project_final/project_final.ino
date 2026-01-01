@@ -609,7 +609,7 @@ void setup()
     Acces_point();  //Function "Acces_point" enables the acces point and the server web
   }
 
-  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
+  
 
   else  //The ESP32 can connect to the wifi
   {
@@ -628,6 +628,7 @@ void setup()
     {
       //This wake up is due to the second wake up. It allows the ESP32 to wake up if the sensor PIR detects motion
       prefs.putString("LECTURE", "HIGH"); 
+      esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
       esp_sleep_enable_ext1_wakeup((1ULL << CAPTEUR_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
       prefs_param.end();
       prefs.end();
