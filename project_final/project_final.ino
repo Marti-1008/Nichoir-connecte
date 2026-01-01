@@ -35,7 +35,6 @@ Preferences prefs;
 struct CameraSettings {
     framesize_t frameSizes[4] = { // different picture formats
         FRAMESIZE_QQVGA,
-        
         FRAMESIZE_VGA,
         FRAMESIZE_XGA,
         FRAMESIZE_UXGA
@@ -281,7 +280,7 @@ void handleSaveWifi()
 
   Serial.println("Reçu SSID : " + ssidStr); 
   
-   Serial.println("Reçu choix : " + choice);
+  Serial.println("Reçu choix : " + choice);
 
 
 
@@ -344,7 +343,7 @@ void connectToWiFi() {
     Serial.printf("Connecting to ", globalSavedSSID.c_str());
     
     int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 15) //It trys connecting to the wifi for 5 seconds 
+    while (WiFi.status() != WL_CONNECTED && attempts < 10) //It trys connecting to the wifi for 5 seconds 
     {
         delay(500);
         Serial.print(".");
@@ -370,6 +369,8 @@ void connectToWiFi() {
       prefs_param.end();
       prefs.end();
       Serial.println("DORS");
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
       Serial.flush(); 
       esp_deep_sleep_start(); //It goes to deep sleep
     }
@@ -382,8 +383,6 @@ void connectToWiFi() {
 //Settings of the camera 
 void Setcam()
 {
- 
-  
   uint8_t value_contrast = prefs_param.getInt("set_contrast",0); //Get the data from the memory
   uint8_t value_qualite = prefs_param.getInt("set_qualite",0);
   uint8_t value_saturation = prefs_param.getInt("set_saturation",0);
@@ -432,6 +431,8 @@ void sub()
   {
     prefs_param.end();
     prefs.end();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     Serial.println("DORS");
     Serial.flush(); 
     esp_deep_sleep_start(); //It goes to deep sleep
@@ -459,6 +460,8 @@ void connect_TO_mqtt()
     
     prefs_param.end();
     prefs.end();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     Serial.println("SOMMEIL");
     Serial.flush(); 
     esp_deep_sleep_start();
@@ -606,9 +609,11 @@ void setup()
     Acces_point();  //Function "Acces_point" enables the acces point and the server web
   }
 
+  esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
+
   else  //The ESP32 can connect to the wifi
   {
-    esp_sleep_enable_timer_wakeup(24ULL * 60 * 60 * 1000000ULL); // 24 hours in microsencode, ULL means :  Unsigned Long Long
+   
     lecture = prefs.getString("LECTURE", "LOW");
     if (lecture=="HIGH")
     {
@@ -692,15 +697,17 @@ void loop()
       }
       else 
       {
-         prefs_param.end();
+        digitalWrite(LED_PIN, LOW); //It truns off the infrared LED on the PCB
+        client.disconnect();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        prefs_param.end();
         prefs.end();
         Serial.println("eteint");
         Serial.flush(); 
         esp_deep_sleep_start(); //go to the deep sleep
       }
       Serial.println("passage");
-      digitalWrite(LED_PIN, LOW);//It turns off the infrared LED on the PCB
-
       battery();
   
     }
@@ -710,6 +717,9 @@ void loop()
     }
     else
     {
+      client.disconnect();
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
       prefs_param.end();
       prefs.end();
       Serial.println("eteint du à une perte de connexion");
@@ -725,7 +735,9 @@ void loop()
       client.loop();
     }
   
-  
+  client.disconnect();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
   prefs_param.end();
   prefs.end();
   Serial.println("eteint");

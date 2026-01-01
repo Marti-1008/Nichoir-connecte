@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 
 from sqlalchemy.orm import sessionmaker
 
-from TablesMariaDB import CamParametre, Wifi, Battrie, Image, Camera
+from TablesMariaDB import CamParametre, Battrie, Image, Camera
 
 from datetime import datetime
 
@@ -15,35 +15,39 @@ import paho.mqtt.client as mqtt
 import json
  
 app = Flask(__name__)
+
+# Database connection setup (MariaDB)
  
-engine = create_engine("mariadb+mariadbconnector://martin:1234@192.168.2.58:3306/RPG", echo=True)
+engine = create_engine("mariadb+mariadbconnector://martin:1234@10.42.0.1:3306/RPG", echo=True)
 
 Session = sessionmaker(bind=engine)
  
-# --- CONFIGURATION MQTT (Juste pour l'envoi) ---
-
-# On ne dÃ©finit PAS de on_message ici, car c'est mariaDB.py qui gÃ¨re la rÃ©ception.
+# MQTT CONFIGURATION
 
 cli = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
-cli.connect("192.168.2.58", 1883)
+cli.connect("10.42.0.1", 1883)
 
 cli.loop_start()
  
+# Function to retrieve battery history for charts
 def get_battery_data(cam_id):
 
     session = Session()
 
+    # Get last 50 entries for the specific camera
     donnees = session.query(Battrie).filter(Battrie.NumeroCam == cam_id).order_by(Battrie.date.asc()).limit(50).all()
 
     session.close()
  
+    # Extract data list
     labels = [d.date for d in donnees]
 
     levels = [d.poucentage for d in donnees]
 
     voltages = [d.voltage for d in donnees]
- 
+    
+    # Return data as JSON for the frontend
     return json.dumps(labels), json.dumps(levels), json.dumps(voltages)
  
 @app.route('/')
@@ -52,16 +56,17 @@ def index():
 
     session = Session()
 
-    # 1. Menu dÃ©roulant : RÃ©cupÃ©rer toutes les camÃ©ras
+    # Dropdown menu logic
 
     cameras = session.query(Camera).all()
 
-    # 2. Quelle camÃ©ra afficher ?
-
     cam_id_arg = request.args.get('cam_id', type=int)
+
+    date_filter = request.args.get('date_filter')
 
     selected_cam = None
 
+    # Logic to determine which camera is currently selected
     if cameras:
 
         if cam_id_arg:
@@ -79,15 +84,19 @@ def index():
             selected_cam = cameras[0]
 
     current_id = selected_cam.id if selected_cam else 0
- 
-    # 3. DonnÃ©es pour la camÃ©ra sÃ©lectionnÃ©e
+    # Query images for the current camera
+    query = session.query(Image).filter(Image.NumeroCam == current_id)
+    # Apply date filter if it exists
+    if date_filter:
 
-    images_db = session.query(Image).filter(Image.NumeroCam == current_id).order_by(Image.date.desc()).all()
+        query = query.filter(Image.date.like(f"{date_filter}%"))
 
+    images_db = query.order_by(Image.date.desc()).all()
+    # Get the last configuration settings
     current_config = session.query(CamParametre).filter(CamParametre.NumeroCam == current_id).order_by(CamParametre.id.desc()).first()
 
     session.close()
- 
+    # Format image data for HTML
     images_data = []
 
     for img in images_db:
@@ -95,22 +104,24 @@ def index():
         nom_fichier = os.path.basename(img.path)
 
         images_data.append({"id": img.idi, "url": f"images/{nom_fichier}", "date": img.date})
- 
+    # Get battery statistics
     dates_json, levels_json, voltages_json = get_battery_data(current_id)
- 
-    return render_template("index.html", 
+
+    return render_template("index.html",
 
                            images=images_data,
 
-                           dates_json=dates_json, 
+                           dates_json=dates_json,
 
-                           levels_json=levels_json, 
+                           levels_json=levels_json,
 
                            voltages_json=voltages_json,
 
                            cameras=cameras,          
 
-                           selected_cam=selected_cam, 
+                           selected_cam=selected_cam,
+
+                           selected_date=date_filter,
 
                            config=current_config)
  
@@ -125,7 +136,7 @@ def delete_image(image_id):
     if image_to_delete:
 
         try:
-
+            # Delete file from filesystem
             if os.path.exists(image_to_delete.path):
 
                 os.remove(image_to_delete.path)
@@ -133,7 +144,7 @@ def delete_image(image_id):
         except Exception as e:
 
             print(f"Erreur suppression fichier : {e}")
- 
+        # Delete record from database
         session.delete(image_to_delete)
 
         session.commit()
@@ -146,17 +157,13 @@ def delete_image(image_id):
 
 def update_params():
 
-    cam_id = request.form.get('cam_id', type=int) # L'ID vient du formulaire cachÃ© ou du select
+    cam_id = request.form.get('cam_id', type=int)
 
-    # Si cam_id est None, on ne peut rien faire
+    # If cam_id is None we cannot do anything
 
     if not cam_id:
 
         return redirect(url_for('index'))
- 
-    ssid = request.form.get('ssid')
-
-    password = request.form.get('password')
  
     resolution = request.form.get('resolution')
 
@@ -165,27 +172,11 @@ def update_params():
     contrast = request.form.get('contrast')
 
     saturation = request.form.get('saturation')
-
-    quality = request.form.get('quality')
-
-    mirror = request.form.get('mirror')
-
-    flip = request.form.get('flip')
- 
-    mirror_val = 1 if mirror else 0
-
-    flip_val = 1 if flip else 0
  
     session = Session()
-
-    if ssid:
-
-        new_param_wifi = Wifi(NumeroCam=cam_id, ssid=ssid, pasword=password, date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-        session.add(new_param_wifi)
  
     try:
-
+        # Create new parameter entry in DB
         new_param = CamParametre(
 
             NumeroCam=cam_id,
@@ -198,12 +189,6 @@ def update_params():
 
             saturation=int(saturation) if saturation else 0,
 
-            quality=int(quality) if quality else 10,
-
-            mirror=mirror_val,
-
-            flip=flip_val,
-
             date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         )
@@ -211,14 +196,6 @@ def update_params():
         session.add(new_param)
 
         session.commit()
-
-        # Envoi MQTT : On cible la camÃ©ra spÃ©cifique ou le topic gÃ©nÃ©ral
-
-        # Pour faire simple, on envoie le signal d'update
-
-        topic_update = f"B3/MartinOmar/{cam_id}/parametre/camera/update"
-
-        cli.publish(topic_update, "update")
 
     except Exception as e:
 
@@ -235,4 +212,5 @@ def update_params():
 if __name__ == "__main__":
 
     app.run(host="0.0.0.0", port=5000, debug=True)
+
  

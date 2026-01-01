@@ -1,11 +1,11 @@
 from sqlalchemy.orm import DeclarativeBase, mapped_column,relationship
 
-from sqlalchemy import Integer,String, create_engine,ForeignKey
- 
+from sqlalchemy import Integer,Float,String, create_engine,ForeignKey
+# Base class for SQLAlchemy ORM models
 class Base(DeclarativeBase):
 
     pass
- 
+# Table representing the physical ESP32 cameras
 class Camera(Base):
 
     __tablename__ = "Camera"
@@ -13,12 +13,12 @@ class Camera(Base):
     id = mapped_column(Integer, primary_key = True)
 
     Nom = mapped_column(String(40),nullable=False)
- 
+
     def __str__(self):
 
         return f"{self.id}:{self.Nom}"
 
- 
+# Table storing references to saved images
 class Image(Base):
 
     __tablename__ = "Image"
@@ -27,51 +27,32 @@ class Image(Base):
 
     path = mapped_column(String(100),nullable=False)
 
-    date = mapped_column(String(20),nullable=False)
+    date = mapped_column(String(50),nullable=False)
 
     NumeroCam = mapped_column(Integer,ForeignKey('Camera.id'))
- 
+
     def __str__(self):
 
         return f"{self.idi}:{self.path},{self.date}"
-
+# Table storing battery levels and voltage
 class Battrie(Base):
 
     __tablename__ = "Battrie"
 
     id = mapped_column(Integer, primary_key = True)
 
-    poucentage = mapped_column(Integer,nullable=False)
+    poucentage = mapped_column(Float,nullable=False)
 
-    voltage = mapped_column(Integer,nullable=False)
+    voltage = mapped_column(Float,nullable=False)
 
-    date = mapped_column(String(20),nullable=False)
+    date = mapped_column(String(50),nullable=False)
 
     NumeroCam = mapped_column(Integer,ForeignKey('Camera.id'))
- 
+
     def __str__(self):
 
         return f"{self.id}:{self.poucentage},{self.voltage},{self.date}"
- 
-class Wifi(Base):
-
-    __tablename__ = "Wifi"
-
-    id = mapped_column(Integer, primary_key = True)
-
-    ssid = mapped_column(String(40),nullable=False)
-
-    pasword = mapped_column(String(40),nullable=False)
-
-    date = mapped_column(String(20),nullable=False)
-
-    NumeroCam = mapped_column(Integer,ForeignKey('Camera.id'))
- 
- 
-    def __str__(self):
-
-        return f"{self.id}:{self.ssid},{self.pasword}"
-
+# Table storing configuration settings (brightness, etc.)
 class CamParametre(Base):
 
     __tablename__ = "CamParametre"
@@ -86,24 +67,18 @@ class CamParametre(Base):
 
     saturation = mapped_column(Integer, nullable=False)
 
-    quality = mapped_column(Integer, nullable=False)
-
-    mirror = mapped_column(String(5), nullable=True)
-
-    flip = mapped_column(String(5), nullable=True)
-
-    date = mapped_column(String(20),nullable=False)
+    date = mapped_column(String(50),nullable=False)
 
     NumeroCam = mapped_column(Integer,ForeignKey('Camera.id'))
- 
+
     def __str__(self):
 
-        return f"{self.id}:{self.resolution},{self.brightness},{self.contrast},{self.saturation},{self.quality},{self.mirror},{self.flip}"
+        return f"{self.id}:{self.resolution},{self.brightness},{self.contrast},{self.saturation}"
 
 def main():
-
-    engine = create_engine("mariadb+mariadbconnector://martin:1234@192.168.2.58:3306/RPG", echo = True)
-
+    # Connection string to the MariaDB server
+    engine = create_engine("mariadb+mariadbconnector://martin:1234@10.42.0.1:3306/RPG", echo = True)
+    # Create all tables defined above if they do not exist
     Base.metadata.create_all(engine)
 
     from sqlalchemy.orm import sessionmaker
@@ -111,7 +86,7 @@ def main():
     Session = sessionmaker(bind=engine)
 
     session = Session()
-
+    # Check if the database is empty, if so, add a default camera
     if not session.query(Camera).first():
 
         cam1 = Camera(Nom="ESP32-Salon")
@@ -123,8 +98,9 @@ def main():
         print("Camera par defaut cree !")
 
     session.close()
- 
+
 if __name__ == "__main__":
 
     main()
+
  
