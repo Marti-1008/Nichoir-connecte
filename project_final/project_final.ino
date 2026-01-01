@@ -26,7 +26,7 @@
 WebServer server(80);
 WiFiClient espClient;
 PubSubClient client(espClient);
-IPAddress mqttServer(192,168,1,59); // address of the broker mqtt
+IPAddress mqttServer(10,42,0,1); // address of the broker mqtt
 Preferences prefs_param;
 Preferences prefs;
 
