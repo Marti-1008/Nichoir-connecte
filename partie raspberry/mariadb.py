@@ -213,7 +213,7 @@ cli.subscribe("B3/MartinOmar/+/parametre/battrie/#")
 cli.subscribe("B3/MartinOmar/+/image/start")
 cli.subscribe("B3/MartinOmar/+/image/data", qos=1)
 cli.subscribe("B3/MartinOmar/+/image/end")
-cli.subscribe("B3/MartinOmar/parametre/camera/set") 
+cli.subscribe("B3/MartinOmar/+/parametre/camera/set") 
 
 # Add callbacks
 cli.message_callback_add("B3/MartinOmar/+/parametre/battrie/#", fctTopicBattrie)

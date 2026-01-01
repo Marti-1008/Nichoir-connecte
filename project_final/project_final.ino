@@ -17,8 +17,8 @@
 #define batterie_ADC 33 // GPIO of the battery
 #define LED_PIN     4   // GPIO of the led
 #define CAPTEUR_PIN 13  // GPIO of the sensor PIR
-#define MAGIC_VALUE1 0x30
-#define MAGIC_VALUE2 0x47
+#define MAGIC_VALUE1 0x23
+#define MAGIC_VALUE2 0x46
 #define SSID_MAX_LEN 32
 #define PASS_MAX_LEN 64
 
@@ -45,6 +45,7 @@ struct CameraSettings {
     {
       TimerCAM.Camera.sensor->set_contrast(TimerCAM.Camera.sensor, value);
       Serial.println("change contrast");
+      Serial.println(value);
     }
 
    
@@ -52,6 +53,7 @@ struct CameraSettings {
     {
       TimerCAM.Camera.sensor->set_saturation(TimerCAM.Camera.sensor, value);
       Serial.println("change sat");
+      Serial.println(value);
     }
 
    
@@ -59,6 +61,7 @@ struct CameraSettings {
     {
       TimerCAM.Camera.sensor->set_brightness(TimerCAM.Camera.sensor, value);
       Serial.println("lum");
+      Serial.println(value);
     }
     
   
@@ -66,6 +69,7 @@ struct CameraSettings {
     {
       TimerCAM.Camera.sensor->set_framesize(TimerCAM.Camera.sensor, frameSizes[index]);
       Serial.println("taille");
+      Serial.println(index);
     }
 };
 //=======================================================================================================================================================
@@ -93,52 +97,54 @@ CameraSettings camSettings;
 void callback(char* topic, byte* payload, unsigned int length)
 {
   Serial.println("reception de messages");
+  Serial.println(*payload);
   if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/contrast") == 0)
   {
-    int value = atoi((char*)payload);
-    if (-3<value && value<3)
+    
+    char contrast[length+1];
+    memcpy(contrast, payload, length);
+    contrast[length]='\0';
+    int contrast_value = atoi(contrast);
+    if (-3<contrast_value && contrast_value<3)
     {
-      char contrast[length+1];
-      memcpy(contrast, payload, length);
-      contrast[length]='\0';
-
-      prefs_param.putInt("set_contrast",atoi(contrast));
+      prefs_param.putInt("set_contrast",contrast_value);
+      Serial.println(contrast_value);
     }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/saturation") == 0)
   {
-    int value = atoi((char*)payload);
-    if (-3<value && value<3)
+    
+    char saturation[length+1];
+    memcpy(saturation, payload, length);
+    saturation[length]='\0';
+    int saturation_value= atoi(saturation);
+    if (-3<saturation_value && saturation_value<3)
     {
-      char saturation[length+1];
-      memcpy(saturation, payload, length);
-      saturation[length]='\0';
-
-      prefs_param.putInt("set_saturation",atoi(saturation));
+      prefs_param.putInt("set_saturation",saturation_value);
+      Serial.println(saturation_value);
     }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/brightness") == 0)
   {
-    int value = atoi((char*)payload);
-    if (-3<value && value<3)
+    
+    char brightness[length+1];
+    memcpy(brightness, payload, length);
+    brightness[length]='\0';
+    int brightness_value=atoi(brightness);
+    if (-3<brightness_value && brightness_value<3)
     {
-      char brightness[length+1];
-      memcpy(brightness, payload, length);
-      brightness[length]='\0';
-
-      prefs_param.putInt("set_brightness",atoi(brightness));
+      prefs_param.putInt("set_brightness",brightness_value);
     }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/resolution") == 0)
   {
-    int value = atoi((char*)payload);
-    if (-1<value && value<3)
+
+    char res[length+1];
+    memcpy(res, payload, length);
+    res[length]='\0';
+    int res_index = atoi(res); 
+    if (-1<res_index && res_index<4)
     {
-      char res[length+1];
-      memcpy(res, payload, length);
-      res[length]='\0';
-    
-      int res_index = atoi(res); 
       prefs_param.putInt("resolution",res_index);
     }
   } 
@@ -329,7 +335,7 @@ void connectToWiFi() {
     String globalSavedSSID = prefs.getString("ssid", "O"); //Get the password and the name of the wifi from the memory
     String savedPW = prefs.getString("pw", "0");
     String choice = prefs.getString("choice", "");
-    if (choice=="1")
+    if (choice=="0")
     {
       WiFi.begin(globalSavedSSID.c_str(), savedPW.c_str());
       Serial.println("Wifi sécurisé");
@@ -352,6 +358,7 @@ void connectToWiFi() {
     Serial.println();
     if (WiFi.status() == WL_CONNECTED) //When the ESP32 is connected, It connects to the broquer mqtt on this port 1883
     {
+      client.setServer(mqttServer, 1883);
       if (client.connect("ESP32CAM")) 
       {
         Serial.println("connected");
@@ -359,7 +366,7 @@ void connectToWiFi() {
       Serial.println("WiFi connected!");
       Serial.print("IP address: ");
       Serial.println(WiFi.localIP());
-      client.setServer(mqttServer, 1883);
+      
     } 
     else //If the ESP32 can't connect to the wifi. It increments the data missed_connexion. If this data is 3, the webserver started to configure the new wifi. 
     {
@@ -384,10 +391,10 @@ void connectToWiFi() {
 void Setcam()
 {
   uint8_t value_contrast = prefs_param.getInt("set_contrast",0); //Get the data from the memory
-  uint8_t value_qualite = prefs_param.getInt("set_qualite",0);
+  uint8_t value_qualite = prefs_param.getInt("resolution",0);
   uint8_t value_saturation = prefs_param.getInt("set_saturation",0);
   uint8_t value_brightness = prefs_param.getInt("set_brightness",0);
-  Serial.println(value_qualite);
+
   if (TimerCAM.Camera.sensor == NULL)  //Security of the camera if the camera does not start correctly
   {      
     Serial.println("Erreur: Capteur non initialisé !"); 
@@ -398,7 +405,7 @@ void Setcam()
     esp_deep_sleep_start(); //It goes to deep sleep      
   }
   camSettings.setContrast(value_contrast);
-  
+
   camSettings.setSaturation(value_saturation);
   
   camSettings.setBrightness(value_brightness);
@@ -424,7 +431,6 @@ void sub()
     client.subscribe("B3/MartinOmar/1/parametre/camera/brightness");
     client.subscribe("B3/MartinOmar/1/parametre/camera/contrast");
     client.subscribe("B3/MartinOmar/1/parametre/camera/saturation");
-    client.subscribe("B3/MartinOmar/1/parametre/camera/quality");
     client.setCallback(callback);
   }
   else
