@@ -16,9 +16,7 @@ Session = sessionmaker(bind=engine)
 buffers_images = {} 
 noms_images = {}
 
-# Global config variables
-dernier_wifi = {}
-dernier_cam = {}
+
 
 def on_message(client, userdata, message):
     try:
@@ -43,7 +41,6 @@ def on_message(client, userdata, message):
         print(f"Erreur detection auto: {e}")
 
 def envoyerParametresVersESP32(cli, cam_id):
-    global dernier_wifi, dernier_cam
     session = Session()
     # Get the latest configuration from DB
     cam_param = session.query(CamParametre)\

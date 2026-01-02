@@ -97,7 +97,6 @@ CameraSettings camSettings;
 void callback(char* topic, byte* payload, unsigned int length)
 {
   Serial.println("reception de messages");
-  Serial.println(*payload);
   if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/contrast") == 0)
   {
     
@@ -121,7 +120,6 @@ void callback(char* topic, byte* payload, unsigned int length)
     if (-3<saturation_value && saturation_value<3)
     {
       prefs_param.putInt("set_saturation",saturation_value);
-      Serial.println(saturation_value);
     }
   }
   else if (strcmp(topic,"B3/MartinOmar/1/parametre/camera/brightness") == 0)
@@ -282,13 +280,8 @@ void handleSaveWifi()
      prefs.putString("pw", pwdStr);  //It writes the password in the memory of the ESP32 
   }
   
-  
-
   Serial.println("Reçu SSID : " + ssidStr); 
-  
   Serial.println("Reçu choix : " + choice);
-
-
 
   if (first_time) 
   {
@@ -605,17 +598,13 @@ void setup()
     missed_connexion = prefs.getInt("disconnect",0); //It knows how many times the ESP32 was unable to connect to the wifi
   }
   
-  
-  
-  
+
   wifi_can_connect = (first_time ||  ( missed_connexion ==2)); //If the ESP32 must reconfigure the wifi. The value of "wifi_can_connect" is true. 
   Serial.println(first_time);
   if (wifi_can_connect) 
   {
     Acces_point();  //Function "Acces_point" enables the acces point and the server web
   }
-
-  
 
   else  //The ESP32 can connect to the wifi
   {
@@ -643,17 +632,12 @@ void setup()
       esp_deep_sleep_start();
     }
 
-
     Serial.println("WiFi credentials found. Attempting to connect as STA.");
-    
-     
     
     WiFi.mode(WIFI_STA);  //Connexion of the ESP32 to the wifi
     connectToWiFi();  //It called the function "connectToWiFi" to try to connect to the wifi
     connect_TO_mqtt();   //It called the function connect_to_mqtt to try to connect to the broker
     sub(); //It subscribe to some topics
-
-    
 
     if (cause == ESP_SLEEP_WAKEUP_EXT1 ) //If the wake up is due to sensor PIR
     {
